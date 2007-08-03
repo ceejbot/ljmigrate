@@ -32,6 +32,7 @@ import pickle
 import pprint
 import re
 import sys
+import time
 import urllib2
 import xml.dom.minidom
 import xmlrpclib
@@ -43,7 +44,23 @@ configpath = "ljmigrate.cfg"
 global gSourceAccount, gDestinationAccount
 
 # more config, which shouldn't need to change
-# er, anything?
+
+# lj's time format
+# 2004-08-11 13:38:00
+ljTimeFormat = '%Y-%m-%d %H:%M:%S'
+
+def parsetime(input):
+	try:
+		return time.strptime(input, ljTimeFormat)
+	except ValueError, e:
+		#print e
+		return ()
+
+class Entry(object):
+	def __init__(self, dict):
+		for k in dict.keys():
+			self.__dict__[k] = dict[k]
+		pprint.pprint(self)
 
 class Account(object):
 
@@ -73,7 +90,7 @@ class Account(object):
 		fp = open(os.path.join(self.metapath, name), 'r')
 		return fp
 
-	def getSession(self):
+	def makeSession(self):
 		r = urllib2.urlopen(self.flat_api, "mode=getchallenge")
 		response = self.handleFlatResponse(r)
 		r.close()
@@ -82,7 +99,6 @@ class Account(object):
 		response = self.handleFlatResponse(r)
 		r.close()
 		self.session = response['ljsession']
-		return self.session
 		
 	def handleFlatResponse(self, response):
 		r = {}
@@ -136,6 +152,33 @@ class Account(object):
 			'itemid': itemid,
 		}))
 		return e['events'][0]
+		
+	def postEntry(self, entry):
+		#pprint.pprint(entry)
+		params = {
+			'username': self.user,
+			'ver': 1,
+			'lineendings': 'unix',
+		}
+		if entry.has_key('subject'): params['subject'] = entry['subject']
+		if entry.has_key('event'): params['event'] = entry['event']
+		if entry.has_key('security'): params['security'] = entry['security']
+		if entry.has_key('allowmask'): params['allowmask'] = entry['allowmask']
+		if entry.has_key('props'): params['props'] = entry['props']
+		
+		timetuple = parsetime(entry['eventtime'])
+		if len(timetuple) < 5:
+			return 0
+
+		params['year'] = timetuple[0]
+		params['mon'] = timetuple[1]
+		params['day'] = timetuple[2]
+		params['hour'] = timetuple[3]
+		params['min'] = timetuple[4]
+
+		params = self.doChallenge(params)
+		result = self.server_proxy.LJ.XMLRPC.postevent(params)
+		return result
 
 ###
 
@@ -150,13 +193,17 @@ def dumpelement(f, name, e):
 	f.write("</%s>\n" % name)
 
 
-def makeItemName(id):
-	if id.startswith('L-'):
-		return "entry%05d" % (int(id[2:]), )
-	return "entry%05d" % (int(id), )
+def makeItemName(id, type):
+	if id.startswith('L-') or id.startswith('C-'):
+		idstr = "%05d" % (int(id[2:]), )
+	else:
+		idstr = "%05d" % (int(id), )
+	if type == 'entry':
+		return "%s%s" % (type, idstr)
+	return idstr
 
 def writedump(user, itemid, type, event):
-	itemname = makeItemName(itemid)
+	itemname = makeItemName(itemid, type)
 	path = os.path.join(user, itemname)
 	if not os.path.exists(path):
 		os.makedirs(path)
@@ -205,10 +252,11 @@ def main():
 		os.makedirs(gSourceAccount.user)
 		print "Created subdirectory: %s" % gSourceAccount.user
 	
-	ljsession = gSourceAccount.getSession()
+	gSourceAccount.makeSession()
 	
 	newentries = 0
 	newcomments = 0
+	commentsBy = 0
 	errors = 0
 	
 	lastsync = ""
@@ -232,7 +280,6 @@ def main():
 	
 	r = gSourceAccount.getUserPics()
 	userpics = dict(zip(r['pickws'], r['pickwurls']))
-	#userpics['*'] = r['defaultpicurl']
 	
 	while True:
 		syncitems = gSourceAccount.getSyncItems(lastsync)
@@ -244,11 +291,18 @@ def main():
 				try:
 					entry = gSourceAccount.getOneEvent(item['item'][2:])
 					writedump(gSourceAccount.user, item['item'], 'entry', entry)
+					print "    posting journal entry to destination account..."
+					result = gDestinationAccount.postEntry(entry)
 					newentries += 1
 				except exceptions.Exception, x:
 					print "Error getting item: %s" % item['item']
 					pprint.pprint(x)
 					errors += 1
+			elif item['item'].startswith('C-'):
+				commentsBy += 1
+				#print "Skipping comment %s by user (%s)" % (item['item'], item['action'])
+			else:
+				pprint.pprint(item)
 			lastsync = item['time']
 	
 	print "Fetching journal comments for: %s" % gSourceAccount.user
@@ -269,7 +323,7 @@ def main():
 	
 	maxid = lastmaxid
 	while True:
-		r = urllib2.urlopen(urllib2.Request(gSourceAccount.host+"/export_comments.bml?get=comment_meta&startid=%d" % (maxid+1), headers = {'Cookie': "ljsession="+ljsession}))
+		r = urllib2.urlopen(urllib2.Request(gSourceAccount.host+"/export_comments.bml?get=comment_meta&startid=%d" % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
 		meta = xml.dom.minidom.parse(r)
 		r.close()
 		for c in meta.getElementsByTagName("comment"):
@@ -319,7 +373,7 @@ def main():
 	newmaxid = maxid
 	maxid = lastmaxid
 	while True:
-		r = urllib2.urlopen(urllib2.Request(gSourceAccount.host+"/export_comments.bml?get=comment_body&startid=%d" % (maxid+1), headers = {'Cookie': "ljsession="+ljsession}))
+		r = urllib2.urlopen(urllib2.Request(gSourceAccount.host+"/export_comments.bml?get=comment_body&startid=%d" % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
 		meta = xml.dom.minidom.parse(r)
 		r.close()
 		for c in meta.getElementsByTagName("comment"):
@@ -348,7 +402,7 @@ def main():
 				print "Warning: downloaded duplicate comment id %d in jitemid %s" % (id, jitemid)
 			else:
 				entry.documentElement.appendChild(createxml(entry, "comment", comment))				
-				path = os.path.join(gSourceAccount.user, makeItemName(jitemid))
+				path = os.path.join(gSourceAccount.user, makeItemName(jitemid, 'entry'))
 				if not os.path.exists(path):
 					os.makedirs(path)
 				f = codecs.open(os.path.join(path, "comments.xml"), "w", "UTF-8")
@@ -368,9 +422,9 @@ def main():
 	f.close()
 	
 	if origlastsync:
-		print "%d new entries, %d new comments (since %s), %d userpics" % (newentries, newcomments, origlastsync, len(userpics))
+		print "%d new entries, %d new comments (since %s),  %d new comments by user, %d userpics" % (newentries, newcomments, origlastsync, commentsBy, len(userpics))
 	else:
-		print "%d new entries, %d new comments, %d userpics" % (newentries, newcomments, len(userpics))
+		print "%d entries, %d comments, %d comments by user, %d userpics" % (newentries, newcomments, commentsBy, len(userpics))
 	if errors > 0:
 		print "%d errors" % errors
 	
