@@ -18,11 +18,10 @@ Version 1.3
   	userpics
   		keyword1.jpeg
   		keyword2.png
+  	metadata/
+  		(cache info, including the last time we synced)
 	
 """
-
-
-
 
 import codecs
 import exceptions
@@ -43,7 +42,11 @@ configpath = "ljmigrate.cfg"
 
 global gSourceAccount, gDestinationAccount
 
+# more config, which shouldn't need to change
+# er, anything?
+
 class Account(object):
+
 	def __init__(self, host="", user="", password=""):
 		m = re.search("(.*)/interface/xmlrpc", host)
 		if m:
@@ -56,6 +59,19 @@ class Account(object):
 		self.flat_api = self.host + "/interface/flat"
 		self.server_proxy = xmlrpclib.ServerProxy(self.host+"/interface/xmlrpc")
 		self.session = ""
+		
+		self.metapath = os.path.join(user, "metadata")
+		
+	def openMetadataFile(self, name):
+		""" Convenience. """
+		if not os.path.exists(self.metapath):
+			os.makedirs(self.metapath)
+		fp = open(os.path.join(self.metapath, name), 'w')
+		return fp
+	
+	def readMetaDataFile(self, name):
+		fp = open(os.path.join(self.metapath, name), 'r')
+		return fp
 
 	def getSession(self):
 		r = urllib2.urlopen(self.flat_api, "mode=getchallenge")
@@ -94,22 +110,34 @@ class Account(object):
 	def calcChallenge(self, challenge):
 		return md5.new(challenge+md5.new(self.password).hexdigest()).hexdigest()
 		
+	def getUserPics(self):
+		resp = gSourceAccount.server_proxy.LJ.XMLRPC.login(self.doChallenge({
+			'username': self.user,
+			'ver': 1,
+			'getpickws': 1,
+			'getpickwurls': 1,
+		}))
+		return resp
+	
+	def getSyncItems(self, lastsync):
+		r = gSourceAccount.server_proxy.LJ.XMLRPC.syncitems(self.doChallenge({
+			'username': self.user,
+			'ver': 1,
+			'lastsync': lastsync,
+		} ))
+		#pprint.pprint(r)
+		return r['syncitems']
+		
+	def getOneEvent(self, itemid):
+		e = self.server_proxy.LJ.XMLRPC.getevents(self.doChallenge({
+			'username': self.user,
+			'ver': 1,
+			'selecttype': "one",
+			'itemid': itemid,
+		}))
+		return e['events'][0]
 
 ###
-
-def flatresponse(response):
-	r = {}
-	while True:
-		name = response.readline()
-		if len(name) == 0:
-			break
-		if name[-1] == '\n':
-			name = name[:len(name)-1]
-		value = response.readline()
-		if value[-1] == '\n':
-			value = value[:len(value)-1]
-		r[name] = value
-	return r
 
 def dumpelement(f, name, e):
 	f.write("<%s>\n" % name)
@@ -121,9 +149,15 @@ def dumpelement(f, name, e):
 			f.write("<%s>%s</%s>\n" % (k, saxutils.escape(s), k))
 	f.write("</%s>\n" % name)
 
+
+def makeItemName(id):
+	if id.startswith('L-'):
+		return "entry%05d" % (int(id[2:]), )
+	return "entry%05d" % (int(id), )
+
 def writedump(user, itemid, type, event):
-	itemname = "entry%05d" % (int(itemid[2:]), )
-	path = os.path.join(user, itemid)
+	itemname = makeItemName(itemid)
+	path = os.path.join(user, itemname)
 	if not os.path.exists(path):
 		os.makedirs(path)
 	fn = os.path.join(path, "%s.xml" % (type, ))
@@ -172,7 +206,6 @@ def main():
 		print "Created subdirectory: %s" % gSourceAccount.user
 	
 	ljsession = gSourceAccount.getSession()
-	server = xmlrpclib.ServerProxy(gSourceAccount.host+"/interface/xmlrpc")
 	
 	newentries = 0
 	newcomments = 0
@@ -181,7 +214,7 @@ def main():
 	lastsync = ""
 	lastmaxid = 0
 	try:
-		f = open("%s/.last" % gSourceAccount.user, "r")
+		f = gSourceAccount.readMetaDataFile("last_sync")
 		lastsync = f.readline()
 		if lastsync[-1] == '\n':
 			lastsync = lastsync[:len(lastsync)-1]
@@ -197,36 +230,20 @@ def main():
 		pass
 	origlastsync = lastsync
 	
-	r = gSourceAccount.server_proxy.LJ.XMLRPC.login(gSourceAccount.doChallenge({
-		'username': gSourceAccount.user,
-		'ver': 1,
-		'getpickws': 1,
-		'getpickwurls': 1,
-	}))
+	r = gSourceAccount.getUserPics()
 	userpics = dict(zip(r['pickws'], r['pickwurls']))
-	userpics['*'] = r['defaultpicurl']
+	#userpics['*'] = r['defaultpicurl']
 	
 	while True:
-		r = gSourceAccount.server_proxy.LJ.XMLRPC.syncitems(gSourceAccount.doChallenge({
-			'username': gSourceAccount.user,
-			'ver': 1,
-			'lastsync': lastsync,
-		} ))
-		#pprint.pprint(r)
-		if len(r['syncitems']) == 0:
+		syncitems = gSourceAccount.getSyncItems(lastsync)
+		if len(syncitems) == 0:
 			break
-		for item in r['syncitems']:
+		for item in syncitems:
 			if item['item'][0] == 'L':
 				print "Fetching journal entry %s (%s)" % (item['item'], item['action'])
 				try:
-					e = gSourceAccount.server_proxy.LJ.XMLRPC.getevents(gSourceAccount.doChallenge({
-						'username': gSourceAccount.user,
-						'ver': 1,
-						'selecttype': "one",
-						'itemid': item['item'][2:],
-					}))
-					#writedump("%s/%s" % (gSourceAccount.user, item['item']), e['events'][0])
-					writedump(gSourceAccount.user, item['item'], 'entry', e['events'][0])
+					entry = gSourceAccount.getOneEvent(item['item'][2:])
+					writedump(gSourceAccount.user, item['item'], 'entry', entry)
 					newentries += 1
 				except exceptions.Exception, x:
 					print "Error getting item: %s" % item['item']
@@ -237,14 +254,14 @@ def main():
 	print "Fetching journal comments for: %s" % gSourceAccount.user
 	
 	try:
-		f = open("%s/comment.meta" % gSourceAccount.user)
+		f = gSourceAccount.readMetaDataFile('comment.meta')
 		metacache = pickle.load(f)
 		f.close()
 	except:
 		metacache = {}
 	
 	try:
-		f = open("%s/user.map" % gSourceAccount.user)
+		f = gSourceAccount.readMetaDataFile('user.map')
 		usermap = pickle.load(f)
 		f.close()
 	except:
@@ -268,11 +285,11 @@ def main():
 		if maxid >= int(meta.getElementsByTagName("maxid")[0].firstChild.nodeValue):
 			break
 	
-	f = open("%s/comment.meta" % gSourceAccount.user, "w")
+	f = gSourceAccount.openMetadataFile('comment.meta')
 	pickle.dump(metacache, f)
 	f.close()
 	
-	f = open("%s/user.map" % gSourceAccount.user, "w")
+	f = gSourceAccount.openMetadataFile('user.map')
 	pickle.dump(usermap, f)
 	f.close()
 	
@@ -280,7 +297,7 @@ def main():
 	path = os.path.join(gSourceAccount.user, "userpics")
 	if not os.path.exists(path):
 		os.makedirs(path)
-	f = open(os.path.join(gSourceAccount.user, "userpics.xml"), "w")
+	f = gSourceAccount.openMetadataFile("userpics.xml")
 	print >>f, """<?xml version="1.0"?>"""
 	print >>f, "<userpics>"
 	for p in userpics:
@@ -331,7 +348,7 @@ def main():
 				print "Warning: downloaded duplicate comment id %d in jitemid %s" % (id, jitemid)
 			else:
 				entry.documentElement.appendChild(createxml(entry, "comment", comment))				
-				path = os.path.join(gSourceAccount.user, "L-%s" % jitemid)
+				path = os.path.join(gSourceAccount.user, makeItemName(jitemid))
 				if not os.path.exists(path):
 					os.makedirs(path)
 				f = codecs.open(os.path.join(path, "comments.xml"), "w", "UTF-8")
@@ -345,7 +362,7 @@ def main():
 	
 	lastmaxid = maxid
 	
-	f = open("%s/.last" % gSourceAccount.user, "w")
+	f = gSourceAccount.openMetadataFile('last_sync')
 	f.write("%s\n" % lastsync)
 	f.write("%s\n" % lastmaxid)
 	f.close()
