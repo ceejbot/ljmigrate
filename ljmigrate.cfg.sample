@@ -1,0 +1,10 @@
+[setup]
+server: http://livejournal.com
+user: myusername
+password: mypassword
+
+[destination]
+server: http://insanejournal.com
+user: myotheruser
+password: myotherpassword
+
