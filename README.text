@@ -23,6 +23,14 @@ Run ./ljmigrate.py.
 Wait. DON'T INTERRUPT IT. I'm not yet very good about saving state as I go,
 so you'll get double-posts if you interrupt it in the middle and run it again.
 
+If the migration failed for many of your posts, because of LiveJournal flakiness
+or troubles with your network connection, you can re-run the tool to retry the 
+migration:
+
+	./ljmigrate.py --retry
+
+This will skip entries it successfully moved before.
+
 ## To use: long version
 
 * Edit the config file: ljmigrate.cfg
