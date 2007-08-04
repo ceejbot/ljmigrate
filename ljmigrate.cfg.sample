@@ -3,7 +3,7 @@
 # Set to True if you want to repost entries, False if not.
 migrate: True
 # generate html for each entry? True or False
-html: True
+generate-html: True
 
 [source]
 # The host of the journal you're backing up.

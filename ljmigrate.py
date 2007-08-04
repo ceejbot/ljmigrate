@@ -325,7 +325,7 @@ def fetchConfig():
 
 	gGenerateHtml = 1
 	try:
-		item = cfparser.get('settings', 'html')
+		item = cfparser.get('settings', 'generate-html')
 		if item.lower() in ['false', 'no', '0']:
 			gGenerateHtml = 0
 	except ConfigParser.NoOptionError, e:
@@ -438,7 +438,9 @@ class Entry(object):
 		idxtext = '+ %s: <a href="%s">%s</a><br />' % (self.__dict__.get('eventtime', None), fname, subject)
 		indexEntries.append(idxtext)
 
-def emitIndex(htmlpath):
+def emitIndex(htmlpath, firstTime):
+	if firstTime:
+		return # bailing for now, to avoid the data loss bug
 	result = tmpl_start_nojour % ("Journal Index", )
 	result = result + '\n'.join(indexEntries)
 	result = result + tmpl_end
@@ -564,7 +566,7 @@ def main():
 					writedump(gSourceAccount.user, item['item'], 'entry', entry)
 					if gMigrate and gDestinationAccount:
 						if item['action'] == 'create' or  not entry_hash.has_key(item['item'][2:]):
-							print "    re-posting journal self.__dict__..."
+							print "    re-posting journal entry..."
 							result = gDestinationAccount.postEntry(entry)
 							entry_hash[item['item'][2:]] = result.get('itemid', -1)
 						elif entry_hash.has_key(item['item'][2:]):
@@ -696,15 +698,21 @@ def main():
 		print "Now generating a simple html version of your posts + comments."
 		htmlpath = os.path.join(gSourceAccount.user, 'html')
 		if not os.path.exists(htmlpath):
+			firstTime = 1
 			os.makedirs(htmlpath)
+		else:
+			firstTime = 0
 		
 		ids = allEntries.keys()
 		ids.sort()
 		
 		for id in ids:
-			allEntries[id].emitPost(htmlpath);
+			try:
+				allEntries[id].emitPost(htmlpath);
+			except StandardError, e:
+				print "skipping post", id, " because of error:", str(e)
 			
-		emitIndex(htmlpath)
+		emitIndex(htmlpath, firstTime)
 	
 	print "Local archive complete!"
 

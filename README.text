@@ -1,3 +1,9 @@
+ljmigrate 1.3
+
+A tool for archiving posts from any LiveJournal clone site and optionally 
+migrating them to any other LJ-clone site. Useful for moving from LiveJournal
+to GreatestJournal or InsaneJournal, for instance.
+
 Based on ljdump; original ljdump license & header at the bottom of the single
 source file. http://hewgill.com/software/ljdump/
 
@@ -8,10 +14,9 @@ Version 1.3
 BSD licence mumbo-jumbo to follow. By which I mean, do what you want 
 with the source.
 
+## To use: expert version
 
-## To use: fast version
-
-Copy ljmigrate.cfg.sample to ljmigrate.cfg.
+Edit the sample config options in ljmigrate.cfg.
 Edit to point the tool to your LJ account and the account you're migrating to.
 If you're not migrating, set the "migrate" config value to 0 or False.
 Run ./ljmigrate.py.
@@ -20,37 +25,65 @@ so you'll get double-posts if you interrupt it in the middle and run it again.
 
 ## To use: long version
 
-Copy the sample config file (ljmigrate.cfg.sample) to ljmigrate.cfg.
-Edit the file and fill in your source and destination accounts.
-You may leave the destination section out if you don't want to migrate.
-In that case, set "migrate" to False!
+* Edit the config file: ljmigrate.cfg
+  Make sure you use that EXACT name! Many editors will try to force on
+  their filename ending, which will make the config file unfindable by
+  the tool. For best results use TextEdit to edit the file. (Other
+  options are vim, emacs, BBEdit, and TextMate.)
+
+* Edit the settings in the config file.
 
 	[settings]
-	migrate: True or False
-	userpics: True or False
+	migrate: True
+	generate-html: True
 	
+  migrate: can be True or False. Set this to True if you want the tool to
+  copy all your journal entries to another system.
+  generate-html: can be True or False. Set this to True if you want the tool
+  to make simple html files for your entries & all comments.
+
 	[source]
 	server: http://livejournal.com
 	user: myusername
 	password: mypassword
 	
+  You *must* have a source journal section. This is the journal that gets
+  archived locally & the journal that will be optionally copied elsewhere.
+ 
 	[destination]
 	server: http://insanejournal.com
 	user: myotheruser
 	password: myotherpassword
 
-Execute the tool:
+  This is the destination journal; the place you're migrating to. You can 
+  leave the destination section out if you don't want to migrate.
+
+* Run the Terminal. It lives in Applications, in the Utilities folder.
+
+* In the terminal, change directories to the place where you unpacked the 
+  tool. Exactly where that was, is up to you & your web browser. The desktop
+  is one popular location. 
+  
+  	cd ~/Desktop/ljmigrate
+
+  If you unpacked it somewhere else, cd to there. One way to find out where is:
+  	switch to the Finder
+  	look at the Finder window for the ljmigrate folder
+  	command-click on the titlebar: the folder trail shows up in a popup
+
+* Execute the tool:
 
 	./ljmigrate.py
 
-Watch and wait.
+* Watch and wait. The tool is pretty chatty about what it's doing.
 
 ## What the tool produces
 
-A directory named for your account, with a subdirectory containing your
-userpics and one subdirectory for each entry. 
-An html directory inside the account directory, with bare-bones html 
-versions of each of your posts, with comments.
+The tool makes a directory named for your account, with a subdirectory
+containing your userpics and one subdirectory for each entry. If you're
+generating html, it also makes an html directory inside the account
+directory, with bare-bones html versions of each of your posts, with
+comments.
 
 username/
 	entry000001/
@@ -69,14 +102,23 @@ username/
 	metadata/
 		(program state, including the last time we synced)
 		
-The tool can't migrate your userpics, because the LiveJournal API provides
-no way to add or edit icons. You'll need to upload them by hand. The image 
-files in userpics/ are named by keyword, to help. Spaces are replaced by
-_ (underbar) for various geeky reasons.
+If you're migrating, the posts at the destination will have all metadata
+preserved (user pic keywords, mood, tags, music, and location). They
+also have all privacy settings preserved (private, friends-only, custom
+filter settings). Custom friend groups are not yet migrated, since the
+tool makes no attempt to migrate friendlists. (That would, in my
+opinion, be dicey since you don't know that your friends at the
+destination have the same account names as your friends at your original
+journal site.)
+
+The tool can't migrate your userpics, because the LiveJournal API
+provides no way to add or edit icons. You'll need to upload them by
+hand. The image files in userpics/ are named by keyword, to help. Spaces
+are replaced by _ (underbar) for various geeky reasons.
 
 ## Secret nuclear option
 
-While testing I found it very very important to have a tool that nukes all
+While testing I found it very useful to have a tool that nukes all
 the entries in my test journal. I figured you could use it too.
 
 Add a section to the config file that looks like this:
@@ -91,11 +133,17 @@ Run the tool with the --nuke flag:
 	./ljmigrate.py --nuke
 
 Answer the two questions with Y if you REALLY REALLY mean it. THERE IS NO
-GOING BACK ON THIS.
+GOING BACK ON THIS. ONLY RUN IT IF YOU REALLY WANT ALL YOUR POSTS DELETED.
+
+## Many thanks to the brave testers!
+
+ldybastet and kannnichtfranz were early users.
 
 
 ## Changes from ljdump 1.2
 
-- Uses Configparser instead of xml for config, since we are not insane
-- The concept of object-oriented programming and modularity are introduced.
-- Too numerous to mention-- the code begins to diverge.
+- Uses Configparser instead of xml for config, since we are not insane.
+- The concept of object-oriented programming is introduced.
+- Userpics are downloaded & image type identified.
+- Html generation for posts + comments.
+- Others too numerous to mention-- the codebase has now diverged seriously.
