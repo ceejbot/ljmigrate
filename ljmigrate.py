@@ -478,7 +478,7 @@ class Comment(object):
 		return '\n'.join(result)
 
 	
-def main():
+def main(retryMigrate = 0):
 	""" TODO: This is very ugly. Needs refactoring.
 	"""
 	fetchConfig()
@@ -514,6 +514,11 @@ def main():
 		pass
 	origlastsync = lastsync
 	
+	# aaaand ignore all this if we're retrying the migration
+	if retryMigrate:
+		lastsync = ""
+		lastmaxid = 0
+
 	try:
 		f = gSourceAccount.readMetaDataFile('entry_correspondences.hash')
 		entry_hash = pickle.load(f)
@@ -553,7 +558,9 @@ def main():
 
 	if gGenerateHtml:
 		allEntries = {}
-
+		
+	migrationCount = 0
+		
 	while True:
 		syncitems = gSourceAccount.getSyncItems(lastsync)
 		if len(syncitems) == 0:
@@ -565,14 +572,16 @@ def main():
 					entry = gSourceAccount.getOneEvent(item['item'][2:])
 					writedump(gSourceAccount.user, item['item'], 'entry', entry)
 					if gMigrate and gDestinationAccount:
-						if item['action'] == 'create' or  not entry_hash.has_key(item['item'][2:]):
-							print "    re-posting journal entry..."
+					
+						if not entry_hash.has_key(item['item'][2:]):
+							print "    migrating journal entry..."
 							result = gDestinationAccount.postEntry(entry)
 							entry_hash[item['item'][2:]] = result.get('itemid', -1)
-						elif entry_hash.has_key(item['item'][2:]):
+							migrationCount += 1
+						elif item['action'] == 'update':
+							print "   updating migrated entry..."
 							result = gDestinationAccount.editEntry(entry, entry_hash[item['item'][2:]])
-						else:
-							print "    unknown action:", item['action']
+
 					if gGenerateHtml:
 						eobj = Entry(entry, gSourceAccount.user)
 						allEntries[item['item'][2:]] = eobj
@@ -587,6 +596,11 @@ def main():
 			else:
 				pprint.pprint(item)
 			lastsync = item['time']
+	
+	if migrationCount == 1:
+		"One entry migrated or updated on destination."
+	else:
+		print "%d entries migrated or updated on destination." % (migrationCount, )
 	
 	f = gSourceAccount.openMetadataFile('entry_correspondences.hash')
 	pickle.dump(entry_hash, f)
@@ -770,18 +784,22 @@ def nukeall():
 	
 if __name__ == '__main__':
 	try:
-		optlist, pargs = getopt.getopt(sys.argv[1:], 'n', ['nuke', ])
+		optlist, pargs = getopt.getopt(sys.argv[1:], 'nr', ['nuke', 'retry', ])
 	except getopt.GetoptError, e:
 		print e
 
 	options = {}
 	for pair in optlist:
 		options[pair[0]] = pair[1]
-		
+	
+	retryMigrate = 0
+	if options.has_key('--retry') or options.has_key('-r'):
+		retryMigrate = 1
+
 	if options.has_key('--nuke') or options.has_key('-n'):
 		nukeall()
 	else:
-		main()
+		main(retryMigrate)
 
 # ljdump.py - livejournal archiver
 # Greg Hewgill <greg@hewgill.com> http://hewgill.com
