@@ -439,7 +439,8 @@ class Entry(object):
 		indexEntries.append(idxtext)
 
 def emitIndex(htmlpath, firstTime):
-	if firstTime:
+	fpath = os.path.join(htmlpath, 'index.html')
+	if os.path.exists(fpath):
 		return # bailing for now, to avoid the data loss bug
 	result = tmpl_start_nojour % ("Journal Index", )
 	result = result + '\n'.join(indexEntries)
