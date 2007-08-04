@@ -1,6 +1,7 @@
-#!/usr/bin/env python
+#!/usr/bin/python2.3
 
 """
+#!/usr/bin/env python
 Based on ljdump; original ljdump license & header at the bottom of this file.
 Extensive modifications by antennapedia.
 Version 1.3
@@ -285,10 +286,13 @@ def fetchConfig():
 		print "Fix it and try again."
 		sys.exit()
 
+	gMigrate = 0
 	try:
-		gMigrate = cfparser.get('settings', 'migrate')
+		item = cfparser.get('settings', 'migrate')
+		if item.lower() not in ['false', 'no', '0']:
+			gMigrate = 1
 	except NoOptionError, e:
-		gMigrate = 0
+		pass
 
 	gDestinationAccount = None
 	if gMigrate:
@@ -299,7 +303,9 @@ def fetchConfig():
 
 	gBackupUserpics = 0
 	try:
-		gBackupUserpics = cfparser.get('settings', 'migrate')
+		item = cfparser.get('settings', 'userpics')
+		if item.lower() not in ['false', 'no', '0']:
+			gBackupUserpics = 1
 	except NoOptionError, e:
 		pass
 
