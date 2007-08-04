@@ -1,0 +1,75 @@
+Based on ljdump; original ljdump license & header at the bottom of the single
+source file. http://hewgill.com/software/ljdump/
+
+Extensive modifications by antennapedia.
+Version 1.3
+3 August 2007
+
+BSD licence mumbo-jumbo to follow. By which I mean, do what you want 
+with the source.
+
+
+## To use: fast version
+
+Copy ljmigrate.cfg.sample to ljmigrate.cfg.
+Edit to point the tool to your LJ account and the account you're migrating to.
+If you're not migrating, set the "migrate" config value to 0 or False.
+Run ./ljmigrate.py.
+Wait. DON'T INTERRUPT IT. I'm not yet very good about saving state as I go,
+so you'll get double-posts if you interrupt it in the middle and run it again.
+
+## To use: long version
+
+Copy the sample config file (ljmigrate.cfg.sample) to ljmigrate.cfg.
+Edit the file and fill in your source and destination accounts.
+You may leave the destination section out if you don't want to migrate.
+In that case, set "migrate" to False!
+
+	[settings]
+	migrate: True or False
+	userpics: True or False
+	
+	[source]
+	server: http://livejournal.com
+	user: myusername
+	password: mypassword
+	
+	[destination]
+	server: http://insanejournal.com
+	user: myotheruser
+	password: myotherpassword
+
+Execute the tool:
+
+	./ljmigrate.py
+
+Watch and wait.
+
+## What the tool produces
+
+A directory named for your account, with a subdirectory containing your
+userpics and one subdirectory for each entry.
+
+username/
+	entry000001
+		entry.xml
+		comments.xml
+	entry000002
+		entry.xml
+		comments.xml
+	userpics
+		keyword1.jpeg
+		keyword2.png
+	metadata/
+		(program state, including the last time we synced)
+		
+The tool can't migrate your userpics, because the LiveJournal API provides
+no way to add or edit icons. You'll need to upload them by hand. The image 
+files in userpics/ are named by keyword, to help. Spaces are replaced by
+_ (underbar) for various geeky reasons.
+
+## Changes from ljdump 1.2
+
+- Uses Configparser instead of xml for config, since we are not insane
+- The concept of object-oriented programming and modularity are introduced.
+- Too numerous to mention-- the code begins to diverge.

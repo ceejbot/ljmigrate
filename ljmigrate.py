@@ -2,9 +2,11 @@
 
 """
 Based on ljdump; original ljdump license & header at the bottom of this file.
-Extensive modifications by antennapedia@livejournal.
+Extensive modifications by antennapedia.
 Version 1.3
 3 August 2007
+
+BSD licence mumbo-jumbo to follow. By which I mean, do what you want.
 
 - uses Configparser instead of xml for config, since we are not insane
 - dumps to a directory structure like this:
@@ -41,7 +43,7 @@ import ConfigParser
 
 configpath = "ljmigrate.cfg"
 
-global gSourceAccount, gDestinationAccount
+global gSourceAccount, gDestinationAccount, gMigrate, gBackupUserpics
 
 # more config, which shouldn't need to change
 
@@ -165,6 +167,11 @@ class Account(object):
 		if entry.has_key('security'): params['security'] = entry['security']
 		if entry.has_key('allowmask'): params['allowmask'] = entry['allowmask']
 		if entry.has_key('props'): params['props'] = entry['props']
+		if entry.has_key('props'): 
+			params['props'] = entry['props']
+		else:
+			params['props'] = {}
+		params['props']['opt_backdated'] = True
 		
 		timetuple = parsetime(entry['eventtime'])
 		if len(timetuple) < 5:
@@ -178,6 +185,34 @@ class Account(object):
 
 		params = self.doChallenge(params)
 		result = self.server_proxy.LJ.XMLRPC.postevent(params)
+		return result
+
+	def editEntry(self, entry, destid):
+		params = {
+			'username': self.user,
+			'ver': 1,
+			'lineendings': 'unix',
+			'itemid': destid,
+		}
+
+		if entry.has_key('subject'): params['subject'] = entry['subject']
+		if entry.has_key('event'): params['event'] = entry['event']
+		if entry.has_key('security'): params['security'] = entry['security']
+		if entry.has_key('allowmask'): params['allowmask'] = entry['allowmask']
+		if entry.has_key('props'): params['props'] = entry['props']
+		
+		timetuple = parsetime(entry['eventtime'])
+		if len(timetuple) < 5:
+			return 0
+
+		params['year'] = timetuple[0]
+		params['mon'] = timetuple[1]
+		params['day'] = timetuple[2]
+		params['hour'] = timetuple[3]
+		params['min'] = timetuple[4]
+
+		params = self.doChallenge(params)
+		result = self.server_proxy.LJ.XMLRPC.editevent(params)
 		return result
 
 ###
@@ -233,18 +268,46 @@ def canonicalizeFilename(input):
 
 
 def fetchConfig():
-	global gSourceAccount, gDestinationAccount
-	cfparser = ConfigParser.ConfigParser()
+	global gSourceAccount, gDestinationAccount, gMigrate, gBackupUserpics
+	try:
+		cfparser = ConfigParser.SafeConfigParser()
+	except StandardError, e:
+		cfparser = ConfigParser.ConfigParser()
 	try:
 		cfparser.readfp(open(configpath))
 	except StandardError, e:
 		error("Problem reading config file: %s" % str(e))
 	
-	gSourceAccount = Account(cfparser.get('source', 'server'), cfparser.get('source', 'user'), cfparser.get('source', 'password'))
-	gDestinationAccount = Account(cfparser.get('destination', 'server'), cfparser.get('destination', 'user'), cfparser.get('destination', 'password'))
+	try:
+		gSourceAccount = Account(cfparser.get('source', 'server'), cfparser.get('source', 'user'), cfparser.get('source', 'password'))
+	except StandardError, e:
+		print "The configuration file has no 'source' section, or is missing options."
+		print "Fix it and try again."
+		sys.exit()
+
+	try:
+		gMigrate = cfparser.get('settings', 'migrate')
+	except NoOptionError, e:
+		gMigrate = 0
+
+	gDestinationAccount = None
+	if gMigrate:
+		try:
+			gDestinationAccount = Account(cfparser.get('destination', 'server'), cfparser.get('destination', 'user'), cfparser.get('destination', 'password'))
+		except ConfigParser.NoSectionError, e:
+			gMigrate = 0
+
+	gBackupUserpics = 0
+	try:
+		gBackupUserpics = cfparser.get('settings', 'migrate')
+	except NoOptionError, e:
+		pass
 
 	
 def main():
+	""" TODO: This is very ugly. Needs refactoring.
+	"""
+
 	fetchConfig()
 
 	print "Fetching journal entries for: %s" % gSourceAccount.user
@@ -278,9 +341,13 @@ def main():
 		pass
 	origlastsync = lastsync
 	
-	r = gSourceAccount.getUserPics()
-	userpics = dict(zip(r['pickws'], r['pickwurls']))
-	
+	try:
+		f = gSourceAccount.readMetaDataFile('entry_correspondences.hash')
+		entry_hash = pickle.load(f)
+		f.close()
+	except:
+		entry_hash = {}
+
 	while True:
 		syncitems = gSourceAccount.getSyncItems(lastsync)
 		if len(syncitems) == 0:
@@ -291,8 +358,15 @@ def main():
 				try:
 					entry = gSourceAccount.getOneEvent(item['item'][2:])
 					writedump(gSourceAccount.user, item['item'], 'entry', entry)
-					print "    posting journal entry to destination account..."
-					result = gDestinationAccount.postEntry(entry)
+					if gMigrate and gDestinationAccount:
+						if item['action'] == 'create' or  not entry_hash.has_key(item['item'][2:]):
+							print "    re-posting journal entry..."
+							result = gDestinationAccount.postEntry(entry)
+							entry_hash[item['item'][2:]] = result.get('itemid', -1)
+						elif entry_hash.has_key(item['item'][2:]):
+							result = gDestinationAccount.editEntry(entry, entry_hash[item['item'][2:]])
+						else:
+							print "    unknown action:", item['action']
 					newentries += 1
 				except exceptions.Exception, x:
 					print "Error getting item: %s" % item['item']
@@ -305,6 +379,10 @@ def main():
 				pprint.pprint(item)
 			lastsync = item['time']
 	
+	f = gSourceAccount.openMetadataFile('entry_correspondences.hash')
+	pickle.dump(entry_hash, f)
+	f.close()
+
 	print "Fetching journal comments for: %s" % gSourceAccount.user
 	
 	try:
@@ -339,6 +417,12 @@ def main():
 		if maxid >= int(meta.getElementsByTagName("maxid")[0].firstChild.nodeValue):
 			break
 	
+	# checkpoint
+	f = gSourceAccount.openMetadataFile('last_sync')
+	f.write("%s\n" % lastsync)
+	f.write("%s\n" % lastmaxid)
+	f.close()
+
 	f = gSourceAccount.openMetadataFile('comment.meta')
 	pickle.dump(metacache, f)
 	f.close()
@@ -347,28 +431,33 @@ def main():
 	pickle.dump(usermap, f)
 	f.close()
 	
-	print "Fetching userpics for: %s" % gSourceAccount.user
-	path = os.path.join(gSourceAccount.user, "userpics")
-	if not os.path.exists(path):
-		os.makedirs(path)
-	f = gSourceAccount.openMetadataFile("userpics.xml")
-	print >>f, """<?xml version="1.0"?>"""
-	print >>f, "<userpics>"
-	for p in userpics:
-		print >>f, """<userpic keyword="%s" url="%s" />""" % (p, userpics[p])
-		r = urllib2.urlopen(userpics[p])
-		if r:
-			data = r.read()
-			type = imghdr.what(r, data)
-			if p == "*":
-				picfn = os.path.join(path, "default.%s" % type)
-			else:
-				picfn = os.path.join(path, "%s.%s" % (canonicalizeFilename(p), type))
-			picfp = open(picfn, 'w')
-			picfp.write(data)
-			picfp.close()
-	print >>f, "</userpics>"
-	f.close()
+	if gBackupUserpics:
+		print "Fetching userpics for: %s" % gSourceAccount.user
+
+		r = gSourceAccount.getUserPics()
+		userpics = dict(zip(r['pickws'], r['pickwurls']))
+		
+		path = os.path.join(gSourceAccount.user, "userpics")
+		if not os.path.exists(path):
+			os.makedirs(path)
+		f = gSourceAccount.openMetadataFile("userpics.xml")
+		print >>f, """<?xml version="1.0"?>"""
+		print >>f, "<userpics>"
+		for p in userpics:
+			print >>f, """<userpic keyword="%s" url="%s" />""" % (p, userpics[p])
+			r = urllib2.urlopen(userpics[p])
+			if r:
+				data = r.read()
+				type = imghdr.what(r, data)
+				if p == "*":
+					picfn = os.path.join(path, "default.%s" % type)
+				else:
+					picfn = os.path.join(path, "%s.%s" % (canonicalizeFilename(p), type))
+				picfp = open(picfn, 'w')
+				picfp.write(data)
+				picfp.close()
+		print >>f, "</userpics>"
+		f.close()
 	
 	newmaxid = maxid
 	maxid = lastmaxid
