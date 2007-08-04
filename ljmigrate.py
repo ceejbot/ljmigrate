@@ -44,14 +44,12 @@ import ConfigParser
 
 configpath = "ljmigrate.cfg"
 
-global gSourceAccount, gDestinationAccount, gMigrate, gBackupUserpics, gGenerateHtml
-
-# more config, which shouldn't need to change
-
 # lj's time format
 # 2004-08-11 13:38:00
 ljTimeFormat = '%Y-%m-%d %H:%M:%S'
 
+# hackity hack
+global gSourceAccount, gDestinationAccount, gMigrate, gBackupUserpics, gGenerateHtml
 userPictHash = {}
 
 def parsetime(input):
@@ -350,16 +348,30 @@ entryprops = ['journalname', 'subject', 'eventtime', 'itemid', 'GroupMask', 'Sec
 
 class Entry(object):
 	def __init__(self, dict, username):
+		self.journalname = username
 		for k in dict.keys():
 			self.__dict__[k] = dict[k]
-		self.journalname = username
-		#pprint.pprint(dict)
+		self.comments = []
+		self.commentids = {}
+		
+	def addComment(self, comment):
+		self.commentids[comment.id] = comment
+		
+	def buildCommentTree(self):
+		kys = self.commentids.keys()
+		kys.sort()
+		for k in kys:
+			comment = self.commentids[k]
+			if hasattr(comment, 'parentid') and len(comment.parentid) > 0 and self.commentids.has_key(comment.parentid):
+				self.commentids[comment.parentid].addChild(comment)
+			else:
+				self.comments.append(comment)
 
 	def emitPost(self, path):
 		if not hasattr(self, 'itemid'):
 			print "No item ID found in self.__dict__. Skipping:", entry
 			return
-	
+		
 		if hasattr(self, 'props'):
 			properties = self.props
 		else:
@@ -404,6 +416,11 @@ class Entry(object):
 			content = commpattern.sub(r'<b><a href="http://community.livejournal.com/\1/"><img src="http://stat.livejournal.com/img/community.gif" alt="[info]" width="16" height="16" style="vertical-align: bottom; border: 0;" />\1</a></b>', content)
 	
 			result = result + '\n<br /><div id="Content">%s</div>\n' % (content, )
+			
+		# emit comments
+		self.buildCommentTree()
+		for c in self.comments:
+			result = result + c.emit()
 	
 		result = result + tmpl_end
 		
@@ -426,6 +443,29 @@ def emitIndex(htmlpath):
 	output.write(result)
 	output.close()
 
+class Comment(object):
+	def __init__(self, dict):
+		self.children = []
+		for k in dict.keys():
+			self.__dict__[k] = dict[k]
+	
+	def addChild(self, child):
+		self.children.append(child)
+
+	def emit(self, indent=0):
+		result = []
+		
+		result.append('<div class="comment" style="margin-left: %dem; border-left: 1px dotted gray; padding-top: 1em;">' % (3 * indent, ))
+		result.append('<b>%s</b>: %s<br />' % (self.user, self.subject))
+		result.append('<b>%s</b><br />' % self.date)
+		result.append(self.body)
+		result.append('</div>')
+		
+		for child in self.children:
+			result.append(child.emit(indent + 1))
+			
+		
+		return '\n'.join(result)
 
 	
 def main():
@@ -502,9 +542,8 @@ def main():
 		f.close()		
 	
 
-	htmlpath = os.path.join(gSourceAccount.user, 'html')
-	if not os.path.exists(htmlpath):
-		os.makedirs(htmlpath)
+	if gGenerateHtml:
+		allEntries = {}
 
 	while True:
 		syncitems = gSourceAccount.getSyncItems(lastsync)
@@ -527,7 +566,7 @@ def main():
 							print "    unknown action:", item['action']
 					if gGenerateHtml:
 						eobj = Entry(entry, gSourceAccount.user)
-						eobj.emitPost(htmlpath)
+						allEntries[item['item'][2:]] = eobj
 					newentries += 1
 				except exceptions.Exception, x:
 					print "Error getting item: %s" % item['item']
@@ -540,15 +579,10 @@ def main():
 				pprint.pprint(item)
 			lastsync = item['time']
 	
-	if gGenerateHtml:
-		emitIndex(htmlpath)
-	
 	f = gSourceAccount.openMetadataFile('entry_correspondences.hash')
 	pickle.dump(entry_hash, f)
 	f.close()
 
-	print "Fetching journal comments for: %s" % gSourceAccount.user
-	
 	try:
 		f = gSourceAccount.readMetaDataFile('comment.meta')
 		metacache = pickle.load(f)
@@ -562,6 +596,8 @@ def main():
 		f.close()
 	except:
 		usermap = {}
+	
+	print "Fetching journal comments for: %s" % gSourceAccount.user
 	
 	maxid = lastmaxid
 	while True:
@@ -626,6 +662,9 @@ def main():
 			if found:
 				print "Warning: downloaded duplicate comment id %d in jitemid %s" % (id, jitemid)
 			else:
+				if allEntries.has_key(jitemid):
+					cmt = Comment(comment)
+					allEntries[jitemid].addComment(cmt)
 				entry.documentElement.appendChild(createxml(entry, "comment", comment))				
 				path = os.path.join(gSourceAccount.user, makeItemName(jitemid, 'entry'))
 				if not os.path.exists(path):
@@ -645,6 +684,19 @@ def main():
 	f.write("%s\n" % lastsync)
 	f.write("%s\n" % lastmaxid)
 	f.close()
+	
+	if gGenerateHtml:
+		htmlpath = os.path.join(gSourceAccount.user, 'html')
+		if not os.path.exists(htmlpath):
+			os.makedirs(htmlpath)
+		
+		ids = allEntries.keys()
+		ids.sort()
+		
+		for id in ids:
+			allEntries[id].emitPost(htmlpath);
+			
+		emitIndex(htmlpath)
 	
 	if origlastsync:
 		print "%d new entries, %d new comments (since %s),  %d new comments by user, %d userpics" % (newentries, newcomments, origlastsync, commentsBy, len(userpics))

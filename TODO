@@ -1,0 +1,5 @@
+- Generate html for comments along with each entry.
+- 200 lines of main()? Ugh. Clean up.
+- Command line options for everything + usage info.
+- After-the-fact html generation for existing archives.
+- Archives for communities.
