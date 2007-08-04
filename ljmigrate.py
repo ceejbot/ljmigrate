@@ -1,7 +1,6 @@
-#!/usr/bin/python2.3
+#!/usr/bin/env python
 
 """
-#!/usr/bin/env python
 Based on ljdump; original ljdump license & header at the bottom of this file.
 Extensive modifications by antennapedia.
 Version 1.3
@@ -28,6 +27,7 @@ BSD licence mumbo-jumbo to follow. By which I mean, do what you want.
 
 import codecs
 import exceptions
+import getopt
 import imghdr
 import md5
 import os
@@ -130,7 +130,7 @@ class Account(object):
 		return md5.new(challenge+md5.new(self.password).hexdigest()).hexdigest()
 		
 	def getUserPics(self):
-		resp = gSourceAccount.server_proxy.LJ.XMLRPC.login(self.doChallenge({
+		resp = self.server_proxy.LJ.XMLRPC.login(self.doChallenge({
 			'username': self.user,
 			'ver': 1,
 			'getpickws': 1,
@@ -139,7 +139,7 @@ class Account(object):
 		return resp
 	
 	def getSyncItems(self, lastsync):
-		r = gSourceAccount.server_proxy.LJ.XMLRPC.syncitems(self.doChallenge({
+		r = self.server_proxy.LJ.XMLRPC.syncitems(self.doChallenge({
 			'username': self.user,
 			'ver': 1,
 			'lastsync': lastsync,
@@ -215,6 +215,20 @@ class Account(object):
 		params = self.doChallenge(params)
 		result = self.server_proxy.LJ.XMLRPC.editevent(params)
 		return result
+
+	def deleteEntry(self, entryid):
+		params = {
+			'username': self.user,
+			'ver': 1,
+			'lineendings': 'unix',
+			'itemid': entryid,
+			'event': '',
+			# all other fields empty
+		}
+		params = self.doChallenge(params)
+		result = self.server_proxy.LJ.XMLRPC.editevent(params)
+		return result
+
 
 ###
 
@@ -522,9 +536,65 @@ def main():
 		print "%d entries, %d comments, %d comments by user, %d userpics" % (newentries, newcomments, commentsBy, len(userpics))
 	if errors > 0:
 		print "%d errors" % errors
+		
+def nukeall():
+	try:
+		cfparser = ConfigParser.SafeConfigParser()
+	except StandardError, e:
+		cfparser = ConfigParser.ConfigParser()
+	try:
+		cfparser.readfp(open(configpath))
+	except StandardError, e:
+		error("Problem reading config file: %s" % str(e))
+	
+	try:
+		nukedAccount = Account(cfparser.get('nuke', 'server'), cfparser.get('nuke', 'user'), cfparser.get('nuke', 'password'))
+	except StandardError, e:
+		sys.exit()
+
+	print "NUKING ALL ENTRIES IN %s/%s." % (nukedAccount.host, nukedAccount.user)
+	confirm = raw_input('Are you sure? [n/Y] ')
+	if confirm != 'Y':
+		print "Safe choice."
+		sys.exit()
+	confirm = raw_input('Are you really REALLY sure? All entries for %s/%s will be gone. [n/Y] ' % (nukedAccount.host, nukedAccount.user))
+	if confirm != 'Y':
+		print "Safe choice."
+		sys.exit()
+	
+	print "Okay. Nuking all entries."
+	
+	lastsync = ""
+	deleted = 0
+	errors = 0
+	while True:
+		syncitems = nukedAccount.getSyncItems(lastsync)
+		if len(syncitems) == 0:
+			break
+		for item in syncitems:
+			if item['item'][0] == 'L':
+				print "Deleting journal entry %s" % (item['item'], )
+				nukedAccount.deleteEntry(item['item'][2:])
+				deleted += 1
+			lastsync = item['time']
+	print "Deleted %d items." % (deleted, )
+	
+	
 	
 if __name__ == '__main__':
-	main()
+	try:
+		optlist, pargs = getopt.getopt(sys.argv[1:], 'n', ['nuke', ])
+	except getopt.GetoptError, e:
+		print e
+
+	options = {}
+	for pair in optlist:
+		options[pair[0]] = pair[1]
+		
+	if options.has_key('--nuke') or options.has_key('-n'):
+		nukeall()
+	else:
+		main()
 
 # ljdump.py - livejournal archiver
 # Greg Hewgill <greg@hewgill.com> http://hewgill.com

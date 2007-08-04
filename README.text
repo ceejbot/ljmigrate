@@ -68,6 +68,26 @@ no way to add or edit icons. You'll need to upload them by hand. The image
 files in userpics/ are named by keyword, to help. Spaces are replaced by
 _ (underbar) for various geeky reasons.
 
+## Secret nuclear option
+
+While testing I found it very very important to have a tool that nukes all
+the entries in my test journal. I figured you could use it too.
+
+Add a section to the config file that looks like this:
+
+	[nuke]
+	server: http://insanejournal.com
+	user: user_to_nuke
+	password: the_password
+
+Run the tool with the --nuke flag:
+
+	./ljmigrate.py --nuke
+
+Answer the two questions with Y if you REALLY REALLY mean it. THERE IS NO
+GOING BACK ON THIS.
+
+
 ## Changes from ljdump 1.2
 
 - Uses Configparser instead of xml for config, since we are not insane
