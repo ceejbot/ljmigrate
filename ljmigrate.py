@@ -44,7 +44,7 @@ import ConfigParser
 
 configpath = "ljmigrate.cfg"
 
-global gSourceAccount, gDestinationAccount, gMigrate, gBackupUserpics
+global gSourceAccount, gDestinationAccount, gMigrate, gBackupUserpics, gGenerateHtml
 
 # more config, which shouldn't need to change
 
@@ -52,18 +52,14 @@ global gSourceAccount, gDestinationAccount, gMigrate, gBackupUserpics
 # 2004-08-11 13:38:00
 ljTimeFormat = '%Y-%m-%d %H:%M:%S'
 
+userPictHash = {}
+
 def parsetime(input):
 	try:
 		return time.strptime(input, ljTimeFormat)
 	except ValueError, e:
 		#print e
 		return ()
-
-class Entry(object):
-	def __init__(self, dict):
-		for k in dict.keys():
-			self.__dict__[k] = dict[k]
-		pprint.pprint(self)
 
 class Account(object):
 
@@ -283,7 +279,7 @@ def canonicalizeFilename(input):
 
 
 def fetchConfig():
-	global gSourceAccount, gDestinationAccount, gMigrate, gBackupUserpics
+	global gSourceAccount, gDestinationAccount, gMigrate, gBackupUserpics, gGenerateHtml
 	try:
 		cfparser = ConfigParser.SafeConfigParser()
 	except StandardError, e:
@@ -324,12 +320,117 @@ def fetchConfig():
 			gBackupUserpics = 1
 	except NoOptionError, e:
 		pass
+		
+	gGenerateHtml = 1
+	try:
+		item = cfparser.get('settings', 'html')
+		if item.lower() in ['false', 'no', '0']:
+			gGenerateHtml = 0
+	except NoOptionError, e:
+		pass
+
+###
+# html generation
+# poor man's html template; for generating correct html
+
+doctype = """<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+        "http://www.w3.org/TR/html4/loose.dtd">"""
+# substitution variables are: JournalName, Subject
+tmpl_start_jour = "<html>\n<head>\n<title>%s : %s</title></head>\n<body>\n"
+# template start, subject only
+tmpl_start_nojour = "<html>\n<head>\n<title>%s</title></head>\n<body>\n"
+tmpl_end = "</body>\n</html>"
+
+userpattern = re.compile(r'<lj user="([^"]*)">')
+commpattern = re.compile(r'<lj comm="([^"]*)">')
+
+# hackity hack to make this global
+indexEntries = []
+entryprops = ['journalname', 'subject', 'eventtime', 'itemid', 'GroupMask', 'SecurityMode']
+
+class Entry(object):
+	def __init__(self, dict, username):
+		for k in dict.keys():
+			self.__dict__[k] = dict[k]
+		self.journalname = username
+		#pprint.pprint(dict)
+
+	def emitPost(self, path):
+		if not hasattr(self, 'itemid'):
+			print "No item ID found in self.__dict__. Skipping:", entry
+			return
+	
+		if hasattr(self, 'props'):
+			properties = self.props
+		else:
+			properties = {}
+
+		if hasattr(self, 'subject'):
+			subject = self.subject
+			subject = userpattern.sub(r'<b><a href="http://\1.livejournal.com/"><img src="http://stat.livejournal.com/img/userinfo.gif" alt="[info]" width="17" height="17" style="vertical-align: bottom; border: 0;" />\1</a></b>', subject)
+			subject = commpattern.sub(r'<b><a href="http://community.livejournal.com/\1/"><img src="http://stat.livejournal.com/img/community.gif" alt="[info]" width="16" height="16" style="vertical-align: bottom; border: 0;" />\1</a></b>', subject)
+		else:
+			subject = "(No Subject)"
+		
+		result = doctype + tmpl_start_jour % (self.journalname, subject)
+
+		if properties.has_key('picture_keyword'):
+			kw = properties['picture_keyword']
+		else:
+			kw = 'default'
+		if userPictHash.has_key(kw):
+			picpath = userPictHash[kw].replace(self.journalname, '..')
+			result = result + '<div id="picture_keyword" style="float:left; margin: 5px;"><img src="%s" alt="%s" title="%s" /></div>\n' % (picpath, kw, kw)
+		else:
+			result = result + '<div id="picture_keyword"><b>Icon:</b> %s</div>\n' % (kw, )
+
+		for tag in entryprops:
+			if self.__dict__.has_key(tag):
+				result = result + '<div id="%s"><b>%s:</b> %s</div>\n' % (tag, tag, getattr(self, tag))
+
+		if properties.has_key('current_mood'):
+			result = result + '<div id="current_mood"><b>Mood:</b> %s</div>\n' % (properties['current_mood'], )
+		if properties.has_key('current_music'):
+			result = result + '<div id="current_music"><b>Music:</b> %s</div>\n' % (properties['current_music'], )
+		if properties.has_key('taglist'):
+			result = result + '<div id="taglist"><b>Tags:</b> %s</div>\n' % (properties['taglist'], )
+		
+		if hasattr(self, 'event'):
+			result = result + '<br clear="left" />\n'
+			content = self.event
+			if not self.props.has_key('opt_preformatted'):
+				content = content.replace("\n", "<br />\n");
+			content = userpattern.sub(r'<b><a href="http://\1.livejournal.com/"><img src="http://stat.livejournal.com/img/userinfo.gif" alt="[info]" width="17" height="17" style="vertical-align: bottom; border: 0;" />\1</a></b>', content)
+			content = commpattern.sub(r'<b><a href="http://community.livejournal.com/\1/"><img src="http://stat.livejournal.com/img/community.gif" alt="[info]" width="16" height="16" style="vertical-align: bottom; border: 0;" />\1</a></b>', content)
+	
+			result = result + '\n<br /><div id="Content">%s</div>\n' % (content, )
+	
+		result = result + tmpl_end
+		
+		fpath = os.path.join(path, str(self.itemid) + '.html')
+		output = codecs.open(fpath, 'w', 'utf-8', 'replace')
+		output.write(result)
+		output.close()
+		
+		# and finally, add it to the index accumulator
+		idxtext = '+ %s: <a href="%s">%s</a><br />' % (self.__dict__.get('eventtime', None), str(self.itemid) + '.html', subject)
+		indexEntries.append(idxtext)
+
+def emitIndex(htmlpath):
+	result = tmpl_start_nojour % ("Journal Index", )
+	result = result + '\n'.join(indexEntries)
+	result = result + tmpl_end
+
+	fpath = os.path.join(htmlpath, 'index.html')
+	output = codecs.open(fpath, 'w', 'utf-8', 'replace')
+	output.write(result)
+	output.close()
+
 
 	
 def main():
 	""" TODO: This is very ugly. Needs refactoring.
 	"""
-
 	fetchConfig()
 
 	print "Fetching journal entries for: %s" % gSourceAccount.user
@@ -369,6 +470,41 @@ def main():
 		f.close()
 	except:
 		entry_hash = {}
+		
+	if gBackupUserpics:
+		print "Fetching userpics for: %s" % gSourceAccount.user
+
+		r = gSourceAccount.getUserPics()
+		userpics = dict(zip(r['pickws'], r['pickwurls']))
+		userpics['default'] = r['defaultpicurl']
+		
+		path = os.path.join(gSourceAccount.user, "userpics")
+		if not os.path.exists(path):
+			os.makedirs(path)
+		f = gSourceAccount.openMetadataFile("userpics.xml")
+		print >>f, """<?xml version="1.0"?>"""
+		print >>f, "<userpics>"
+		for p in userpics:
+			print >>f, """<userpic keyword="%s" url="%s" />""" % (p, userpics[p])
+			r = urllib2.urlopen(userpics[p])
+			if r:
+				data = r.read()
+				type = imghdr.what(r, data)
+				if p == "*":
+					picfn = os.path.join(path, "default.%s" % type)
+				else:
+					picfn = os.path.join(path, "%s.%s" % (canonicalizeFilename(p), type))
+				userPictHash[p] = picfn
+				picfp = open(picfn, 'w')
+				picfp.write(data)
+				picfp.close()
+		print >>f, "</userpics>"
+		f.close()		
+	
+
+	htmlpath = os.path.join(gSourceAccount.user, 'html')
+	if not os.path.exists(htmlpath):
+		os.makedirs(htmlpath)
 
 	while True:
 		syncitems = gSourceAccount.getSyncItems(lastsync)
@@ -382,13 +518,16 @@ def main():
 					writedump(gSourceAccount.user, item['item'], 'entry', entry)
 					if gMigrate and gDestinationAccount:
 						if item['action'] == 'create' or  not entry_hash.has_key(item['item'][2:]):
-							print "    re-posting journal entry..."
+							print "    re-posting journal self.__dict__..."
 							result = gDestinationAccount.postEntry(entry)
 							entry_hash[item['item'][2:]] = result.get('itemid', -1)
 						elif entry_hash.has_key(item['item'][2:]):
 							result = gDestinationAccount.editEntry(entry, entry_hash[item['item'][2:]])
 						else:
 							print "    unknown action:", item['action']
+					if gGenerateHtml:
+						eobj = Entry(entry, gSourceAccount.user)
+						eobj.emitPost(htmlpath)
 					newentries += 1
 				except exceptions.Exception, x:
 					print "Error getting item: %s" % item['item']
@@ -400,6 +539,9 @@ def main():
 			else:
 				pprint.pprint(item)
 			lastsync = item['time']
+	
+	if gGenerateHtml:
+		emitIndex(htmlpath)
 	
 	f = gSourceAccount.openMetadataFile('entry_correspondences.hash')
 	pickle.dump(entry_hash, f)
@@ -452,34 +594,6 @@ def main():
 	f = gSourceAccount.openMetadataFile('user.map')
 	pickle.dump(usermap, f)
 	f.close()
-	
-	if gBackupUserpics:
-		print "Fetching userpics for: %s" % gSourceAccount.user
-
-		r = gSourceAccount.getUserPics()
-		userpics = dict(zip(r['pickws'], r['pickwurls']))
-		
-		path = os.path.join(gSourceAccount.user, "userpics")
-		if not os.path.exists(path):
-			os.makedirs(path)
-		f = gSourceAccount.openMetadataFile("userpics.xml")
-		print >>f, """<?xml version="1.0"?>"""
-		print >>f, "<userpics>"
-		for p in userpics:
-			print >>f, """<userpic keyword="%s" url="%s" />""" % (p, userpics[p])
-			r = urllib2.urlopen(userpics[p])
-			if r:
-				data = r.read()
-				type = imghdr.what(r, data)
-				if p == "*":
-					picfn = os.path.join(path, "default.%s" % type)
-				else:
-					picfn = os.path.join(path, "%s.%s" % (canonicalizeFilename(p), type))
-				picfp = open(picfn, 'w')
-				picfp.write(data)
-				picfp.close()
-		print >>f, "</userpics>"
-		f.close()
 	
 	newmaxid = maxid
 	maxid = lastmaxid

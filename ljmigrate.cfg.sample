@@ -1,10 +1,12 @@
 [settings]
 # migrate to another site?
 # Set to True if you want to repost entries, False if not.
-migrate: True or False
+migrate: True
 # back up user pics / icons?
 # Set to True if you want to back up your userpics, False if not.
-userpics: True or False
+userpics: True
+# generate html for each entry? True or False
+html: True
 
 [source]
 # The host of the journal you're backing up.
