@@ -288,10 +288,12 @@ def fetchConfig():
 		cfparser = ConfigParser.SafeConfigParser()
 	except StandardError, e:
 		cfparser = ConfigParser.ConfigParser()
+
 	try:
 		cfparser.readfp(open(configpath))
 	except StandardError, e:
-		error("Problem reading config file: %s" % str(e))
+		print "Problem reading config file: %s" % str(e)
+		sys.exit()
 	
 	try:
 		gSourceAccount = Account(cfparser.get('source', 'server'), cfparser.get('source', 'user'), cfparser.get('source', 'password'))
@@ -545,7 +547,8 @@ def nukeall():
 	try:
 		cfparser.readfp(open(configpath))
 	except StandardError, e:
-		error("Problem reading config file: %s" % str(e))
+		print "Problem reading config file: %s" % str(e)
+		sys.exit()
 	
 	try:
 		nukedAccount = Account(cfparser.get('nuke', 'server'), cfparser.get('nuke', 'user'), cfparser.get('nuke', 'password'))
