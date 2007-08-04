@@ -2,9 +2,6 @@
 # migrate to another site?
 # Set to True if you want to repost entries, False if not.
 migrate: True
-# back up user pics / icons?
-# Set to True if you want to back up your userpics, False if not.
-userpics: True
 # generate html for each entry? True or False
 html: True
 
@@ -22,3 +19,8 @@ server: http://insanejournal.com
 user: myotheruser
 password: myotherpassword
 
+# [nuke]
+# option section for the nuclear option; see README for details
+# server: http://insanejournal.com
+# user: myotheruser
+# password: myotherpassword

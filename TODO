@@ -1,5 +1,12 @@
-- Generate html for comments along with each entry.
+TODO
+
+- Bad bug with generating the html index file on subsequent runs-- it will
+  nuke the existing content. 
 - 200 lines of main()? Ugh. Clean up.
 - Command line options for everything + usage info.
 - After-the-fact html generation for existing archives.
 - Archives for communities.
+
+COMPLETED
+
+- Generate html for comments along with each entry.

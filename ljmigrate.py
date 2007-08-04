@@ -49,7 +49,7 @@ configpath = "ljmigrate.cfg"
 ljTimeFormat = '%Y-%m-%d %H:%M:%S'
 
 # hackity hack
-global gSourceAccount, gDestinationAccount, gMigrate, gBackupUserpics, gGenerateHtml
+global gSourceAccount, gDestinationAccount, gMigrate, gGenerateHtml
 userPictHash = {}
 
 def parsetime(input):
@@ -277,7 +277,7 @@ def canonicalizeFilename(input):
 
 
 def fetchConfig():
-	global gSourceAccount, gDestinationAccount, gMigrate, gBackupUserpics, gGenerateHtml
+	global gSourceAccount, gDestinationAccount, gMigrate, gGenerateHtml
 	try:
 		cfparser = ConfigParser.SafeConfigParser()
 	except StandardError, e:
@@ -291,9 +291,15 @@ def fetchConfig():
 	
 	try:
 		gSourceAccount = Account(cfparser.get('source', 'server'), cfparser.get('source', 'user'), cfparser.get('source', 'password'))
-	except StandardError, e:
-		print "The configuration file has no 'source' section, or is missing options."
+	except ConfigParser.NoSectionError, e:
+		print "The configuration file has no 'source' section."
+		print "The tool can't run without a source journal set." 
 		print "Fix it and try again."
+		sys.exit()
+	except ConfigParser.NoOptionError, e:
+		print "The configuration file is missing parameters for the source journal."
+		print "The tool can't run without a source journal set." 
+		print "Copy the sample config and try again."
 		sys.exit()
 
 	gMigrate = 0
@@ -301,7 +307,7 @@ def fetchConfig():
 		item = cfparser.get('settings', 'migrate')
 		if item.lower() not in ['false', 'no', '0']:
 			gMigrate = 1
-	except NoOptionError, e:
+	except ConfigParser.NoOptionError, e:
 		pass
 
 	gDestinationAccount = None
@@ -309,22 +315,20 @@ def fetchConfig():
 		try:
 			gDestinationAccount = Account(cfparser.get('destination', 'server'), cfparser.get('destination', 'user'), cfparser.get('destination', 'password'))
 		except ConfigParser.NoSectionError, e:
+			print "No destination journal specified in the config file; not migrating."
 			gMigrate = 0
+		except ConfigParser.NoOptionError, e:
+			print "The configuration file is missing parameters for the destination journal."
+			print "We can't migrate without knowing the information for the destination." 
+			print "Copy the sample config and try again."
+			sys.exit()
 
-	gBackupUserpics = 0
-	try:
-		item = cfparser.get('settings', 'userpics')
-		if item.lower() not in ['false', 'no', '0']:
-			gBackupUserpics = 1
-	except NoOptionError, e:
-		pass
-		
 	gGenerateHtml = 1
 	try:
 		item = cfparser.get('settings', 'html')
 		if item.lower() in ['false', 'no', '0']:
 			gGenerateHtml = 0
-	except NoOptionError, e:
+	except ConfigParser.NoOptionError, e:
 		pass
 
 ###
@@ -409,7 +413,7 @@ class Entry(object):
 		
 		if hasattr(self, 'event'):
 			result = result + '<br clear="left" />\n'
-			content = self.event
+			content = unicode(self.event)
 			if not self.props.has_key('opt_preformatted'):
 				content = content.replace("\n", "<br />\n");
 			content = userpattern.sub(r'<b><a href="http://\1.livejournal.com/"><img src="http://stat.livejournal.com/img/userinfo.gif" alt="[info]" width="17" height="17" style="vertical-align: bottom; border: 0;" />\1</a></b>', content)
@@ -447,6 +451,10 @@ def emitIndex(htmlpath):
 class Comment(object):
 	def __init__(self, dict):
 		self.children = []
+		self.user = 'None'
+		self.subject = ''
+		self.body = ''
+		self.date = ''
 		for k in dict.keys():
 			self.__dict__[k] = dict[k]
 	
@@ -459,12 +467,11 @@ class Comment(object):
 		result.append('<div class="comment" style="margin-left: %dem; border-left: 1px dotted gray; padding-top: 1em;">' % (3 * indent, ))
 		result.append('<b>%s</b>: %s<br />' % (self.user, self.subject))
 		result.append('<b>%s</b><br />' % self.date)
-		result.append(self.body)
+		result.append(unicode(self.body))
 		result.append('</div>')
 		
 		for child in self.children:
 			result.append(child.emit(indent + 1))
-			
 		
 		return '\n'.join(result)
 
@@ -512,35 +519,34 @@ def main():
 	except:
 		entry_hash = {}
 		
-	if gBackupUserpics:
-		print "Fetching userpics for: %s" % gSourceAccount.user
+	print "Fetching userpics for: %s" % gSourceAccount.user
 
-		r = gSourceAccount.getUserPics()
-		userpics = dict(zip(r['pickws'], r['pickwurls']))
-		userpics['default'] = r['defaultpicurl']
-		
-		path = os.path.join(gSourceAccount.user, "userpics")
-		if not os.path.exists(path):
-			os.makedirs(path)
-		f = gSourceAccount.openMetadataFile("userpics.xml")
-		print >>f, """<?xml version="1.0"?>"""
-		print >>f, "<userpics>"
-		for p in userpics:
-			print >>f, """<userpic keyword="%s" url="%s" />""" % (p, userpics[p])
-			r = urllib2.urlopen(userpics[p])
-			if r:
-				data = r.read()
-				type = imghdr.what(r, data)
-				if p == "*":
-					picfn = os.path.join(path, "default.%s" % type)
-				else:
-					picfn = os.path.join(path, "%s.%s" % (canonicalizeFilename(p), type))
-				userPictHash[p] = picfn
-				picfp = open(picfn, 'w')
-				picfp.write(data)
-				picfp.close()
-		print >>f, "</userpics>"
-		f.close()		
+	r = gSourceAccount.getUserPics()
+	userpics = dict(zip(r['pickws'], r['pickwurls']))
+	userpics['default'] = r['defaultpicurl']
+	
+	path = os.path.join(gSourceAccount.user, "userpics")
+	if not os.path.exists(path):
+		os.makedirs(path)
+	f = gSourceAccount.openMetadataFile("userpics.xml")
+	print >>f, """<?xml version="1.0"?>"""
+	print >>f, "<userpics>"
+	for p in userpics:
+		print >>f, """<userpic keyword="%s" url="%s" />""" % (p, userpics[p])
+		r = urllib2.urlopen(userpics[p])
+		if r:
+			data = r.read()
+			type = imghdr.what(r, data)
+			if p == "*":
+				picfn = os.path.join(path, "default.%s" % type)
+			else:
+				picfn = os.path.join(path, "%s.%s" % (canonicalizeFilename(p), type))
+			userPictHash[p] = picfn
+			picfp = open(picfn, 'w')
+			picfp.write(data)
+			picfp.close()
+	print >>f, "</userpics>"
+	f.close()
 	
 
 	if gGenerateHtml:
@@ -685,8 +691,9 @@ def main():
 	f.write("%s\n" % lastsync)
 	f.write("%s\n" % lastmaxid)
 	f.close()
-	
+		
 	if gGenerateHtml:
+		print "Now generating a simple html version of your posts + comments."
 		htmlpath = os.path.join(gSourceAccount.user, 'html')
 		if not os.path.exists(htmlpath):
 			os.makedirs(htmlpath)
@@ -699,6 +706,8 @@ def main():
 			
 		emitIndex(htmlpath)
 	
+	print "Local archive complete!"
+
 	if origlastsync:
 		print "%d new entries, %d new comments (since %s),  %d new comments by user, %d userpics" % (newentries, newcomments, origlastsync, commentsBy, len(userpics))
 	else:
