@@ -424,13 +424,14 @@ class Entry(object):
 	
 		result = result + tmpl_end
 		
-		fpath = os.path.join(path, str(self.itemid) + '.html')
+		fname = '%05d.html' % int(self.itemid)
+		fpath = os.path.join(path, fname)
 		output = codecs.open(fpath, 'w', 'utf-8', 'replace')
 		output.write(result)
 		output.close()
 		
 		# and finally, add it to the index accumulator
-		idxtext = '+ %s: <a href="%s">%s</a><br />' % (self.__dict__.get('eventtime', None), str(self.itemid) + '.html', subject)
+		idxtext = '+ %s: <a href="%s">%s</a><br />' % (self.__dict__.get('eventtime', None), fname, subject)
 		indexEntries.append(idxtext)
 
 def emitIndex(htmlpath):

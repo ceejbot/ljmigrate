@@ -48,18 +48,24 @@ Watch and wait.
 ## What the tool produces
 
 A directory named for your account, with a subdirectory containing your
-userpics and one subdirectory for each entry.
+userpics and one subdirectory for each entry. 
+An html directory inside the account directory, with bare-bones html 
+versions of each of your posts, with comments.
 
 username/
-	entry000001
+	entry000001/
 		entry.xml
 		comments.xml
-	entry000002
+	entry000002/
 		entry.xml
 		comments.xml
-	userpics
+	userpics/
 		keyword1.jpeg
 		keyword2.png
+	html/
+		index.html
+		00001.html
+		00002.html
 	metadata/
 		(program state, including the last time we synced)
 		
