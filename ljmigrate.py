@@ -73,15 +73,21 @@ class Account(object):
 	def metapath(self):
 		return os.path.join(self.journal, "metadata")
 		
-	def openMetadataFile(self, name):
+	def openMetadataFile(self, name, usecodec = 1):
 		""" Convenience. """
 		if not os.path.exists(self.metapath()):
 			os.makedirs(self.metapath())
-		fp = codecs.open(os.path.join(self.metapath(), name), 'w', 'utf-8', 'replace')
+		if usecodec:
+			fp = codecs.open(os.path.join(self.metapath(), name), 'w', 'utf-8', 'replace')
+		else:
+			fp = open(os.path.join(self.metapath(), name), 'w')
 		return fp
 	
-	def readMetaDataFile(self, name):
-		fp = codecs.open(os.path.join(self.metapath(), name), 'r', 'utf-8', 'replace')
+	def readMetaDataFile(self, name, usecodec = 1):
+		if usecodec:
+			fp = codecs.open(os.path.join(self.metapath(), name), 'r', 'utf-8', 'replace')
+		else:
+			fp = open(os.path.join(self.metapath(), name), 'r')
 		return fp
 
 	def makeSession(self):
@@ -237,6 +243,9 @@ class Account(object):
 			'event': '',
 			# all other fields empty
 		}
+		if self.journal != self.user:
+			params['usejournal'] = self.journal
+		
 		params = self.doChallenge(params)
 		result = self.server_proxy.LJ.XMLRPC.editevent(params)
 		return result
@@ -612,11 +621,13 @@ def synchronizeJournals(migrate = 0):
 		lastmaxid = 0
 
 	try:
-		f = gSourceAccount.readMetaDataFile('entry_correspondences.hash')
+		f = gSourceAccount.readMetaDataFile('entry_correspondences.hash', 0)
 		entry_hash = pickle.load(f)
 		f.close()
 	except:
 		entry_hash = {}
+		
+	considerMigrating = (migrate and gDestinationAccount)
 
 	while 1:
 		syncitems = gSourceAccount.getSyncItems(lastsync)
@@ -625,28 +636,19 @@ def synchronizeJournals(migrate = 0):
 		for item in syncitems:
 			if item['item'][0] == 'L':
 				print "Fetching journal entry %s (%s)" % (item['item'], item['action'])
-				keepTrying = 1
-				
+
+				keepTrying = 5
 				while keepTrying:
 					try:
 						entry = gSourceAccount.getOneEvent(item['item'][2:])
 						writedump(gSourceAccount.journal, item['item'], 'entry', entry)
-	
-						if migrate and gDestinationAccount and (not entry.has_key('poster') or entry['poster'] == gSourceAccount.user or not gMigrateOwnOnly):
-							if not entry_hash.has_key(item['item'][2:]):
-								print "    migrating entry to", gDestinationAccount.journal
-								result = gDestinationAccount.postEntry(entry)
-								entry_hash[item['item'][2:]] = result.get('itemid', -1)
-								migrationCount += 1
-							elif item['action'] == 'update':
-								print "   updating migrated entry in", gDestinationAccount.journal
-								result = gDestinationAccount.editEntry(entry, entry_hash[item['item'][2:]])
-	
+
 						if gGenerateHtml:
 							eobj = Entry(entry, gSourceAccount.user, gSourceAccount.journal)
 							allEntries[item['item'][2:]] = eobj
 						newentries += 1
 						keepTrying = 0
+
 					except socket.gaierror, e:
 						print "Socket error. Double-check your account information, and your net connection."
 						keepTrying = 0
@@ -660,6 +662,51 @@ def synchronizeJournals(migrate = 0):
 						#pprint.pprint(x)
 						errors += 1
 						keepTrying = 0
+						entry = None
+
+				
+				if considerMigrating and entry and (not entry.has_key('poster') or entry['poster'] == gSourceAccount.user or not gMigrateOwnOnly):
+					keepTrying = 5
+					while keepTrying:
+						try:
+							if not entry_hash.has_key(item['item'][2:]):
+								print "    migrating entry to", gDestinationAccount.journal
+								result = gDestinationAccount.postEntry(entry)
+								entry_hash[item['item'][2:]] = result.get('itemid', -1)
+								migrationCount += 1
+							elif item['action'] == 'update':
+								print "   updating migrated entry in", gDestinationAccount.journal
+								result = gDestinationAccount.editEntry(entry, entry_hash[item['item'][2:]])
+							keepTrying = 0
+						except socket.gaierror, e:
+							print "Socket error. Double-check your account information, and your net connection."
+							keepTrying = 0
+						except exceptions.KeyboardInterrupt, e:
+							keepTrying = 0
+							# TODO cleanup
+							sys.exit()
+						except xmlrpclib.Fault, e:
+							code = int(e.faultCode)
+							if code == 101:
+								print "Password on destination is incorrect. Check your config and try again."
+								sys.exit();
+							if code == 205:
+								# Client error: Unknown metadata: taglist
+								matches = re.match(r'Client error: Unknown metadata: (\w+)', e.faultString)
+								if matches:
+									badprop = matches.group(1)
+									del entry['props'][badprop]
+									keepTrying -= 1
+							else:
+								traceback.print_exc(5)
+								# faultString
+								keepTrying = 0
+						except exceptions.Exception, x:
+							print "Error getting item: %s" % item['item']
+							traceback.print_exc(5)
+							#pprint.pprint(x)
+							errors += 1
+							keepTrying = 0
 					
 			elif item['item'].startswith('C-'):
 				commentsBy += 1
@@ -673,19 +720,19 @@ def synchronizeJournals(migrate = 0):
 		else:
 			print "%d entries migrated or updated on destination." % (migrationCount, )
 		
-		f = gSourceAccount.openMetadataFile('entry_correspondences.hash')
+		f = gSourceAccount.openMetadataFile('entry_correspondences.hash', 0)
 		pickle.dump(entry_hash, f)
 		f.close()
 	
 		try:
-			f = gSourceAccount.readMetaDataFile('comment.meta')
+			f = gSourceAccount.readMetaDataFile('comment.meta', 0)
 			metacache = pickle.load(f)
 			f.close()
 		except:
 			metacache = {}
 		
 		try:
-			f = gSourceAccount.readMetaDataFile('user.map')
+			f = gSourceAccount.readMetaDataFile('user.map', 0)
 			usermap = pickle.load(f)
 			f.close()
 		except:
@@ -712,16 +759,16 @@ def synchronizeJournals(migrate = 0):
 				break
 		
 		# checkpoint
-		f = gSourceAccount.openMetadataFile('last_sync')
+		f = gSourceAccount.openMetadataFile('last_sync', 0)
 		f.write("%s\n" % lastsync)
 		f.write("%s\n" % lastmaxid)
 		f.close()
 	
-		f = gSourceAccount.openMetadataFile('comment.meta')
+		f = gSourceAccount.openMetadataFile('comment.meta', 0)
 		pickle.dump(metacache, f)
 		f.close()
 		
-		f = gSourceAccount.openMetadataFile('user.map')
+		f = gSourceAccount.openMetadataFile('user.map', 0)
 		pickle.dump(usermap, f)
 		f.close()
 		
@@ -777,7 +824,7 @@ def synchronizeJournals(migrate = 0):
 		
 		lastmaxid = maxid
 		
-		f = gSourceAccount.openMetadataFile('last_sync')
+		f = gSourceAccount.openMetadataFile('last_sync', 0)
 		f.write("%s\n" % lastsync)
 		f.write("%s\n" % lastmaxid)
 		f.close()
@@ -822,7 +869,7 @@ def main(retryMigrate = 0):
 		print "Created subdirectory: %s" % gSourceAccount.user
 	
 	gSourceAccount.makeSession()
-	gSourceAccount.fetchUserPics()
+	# gSourceAccount.fetchUserPics()
 	# first run does the basics
 	synchronizeJournals(gMigrate)
 	
@@ -851,14 +898,21 @@ def nukeall():
 	try:
 		nukedAccount = Account(cfparser.get('nuke', 'server'), cfparser.get('nuke', 'user'), cfparser.get('nuke', 'password'))
 	except StandardError, e:
+		print "No account set up for nuking. Discretion is the better part of valor."
 		sys.exit()
 
-	print "NUKING ALL ENTRIES IN %s/%s." % (nukedAccount.host, nukedAccount.user)
+	try:
+		jrn = cfparser.get('nuke', 'community').strip()
+		nukedAccount.journal = jrn
+	except ConfigParser.NoOptionError, e:
+		pass
+
+	print "NUKING ALL ENTRIES IN %s (%s)" % (nukedAccount.journal, nukedAccount.host)
 	confirm = raw_input('Are you sure? [n/Y] ')
 	if confirm != 'Y':
 		print "Safe choice."
 		sys.exit()
-	confirm = raw_input('Are you really REALLY sure?\nAll entries for %s/%s will be gone. [n/Y] ' % (nukedAccount.host, nukedAccount.user))
+	confirm = raw_input('Are you really REALLY sure?\nAll entries for %s/%s will be gone. [n/Y] ' % (nukedAccount.host, nukedAccount.journal))
 	if confirm != 'Y':
 		print "Safe choice."
 		sys.exit()
