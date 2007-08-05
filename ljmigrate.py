@@ -42,7 +42,12 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
+__version__ = '1.3 070805a'
+__author__ = 'Antennapedia'
+__license__ = 'BSD license'
+
 configpath = "ljmigrate.cfg"
+
 
 # lj's time format
 # 2004-08-11 13:38:00
@@ -80,11 +85,11 @@ class Account(object):
 		""" Convenience. """
 		if not os.path.exists(self.metapath):
 			os.makedirs(self.metapath)
-		fp = open(os.path.join(self.metapath, name), 'w')
+		fp = codecs.open(os.path.join(self.metapath, name), 'w', 'utf-8', 'replace')
 		return fp
 	
 	def readMetaDataFile(self, name):
-		fp = open(os.path.join(self.metapath, name), 'r')
+		fp = codecs.open(os.path.join(self.metapath, name), 'r', 'utf-8', 'replace')
 		return fp
 
 	def makeSession(self):
@@ -478,7 +483,7 @@ class Comment(object):
 		
 		return '\n'.join(result)
 
-	
+
 def main(retryMigrate = 0):
 	""" TODO: This is very ugly. Needs refactoring.
 	"""
@@ -530,7 +535,10 @@ def main(retryMigrate = 0):
 	print "Fetching userpics for: %s" % gSourceAccount.user
 
 	r = gSourceAccount.getUserPics()
-	userpics = dict(zip(r['pickws'], r['pickwurls']))
+	userpics = {}
+	for i in range(0, len(r['pickws'])):
+		userpics[str(r['pickws'][i])] = r['pickwurls'][i]
+	#userpics = dict(zip(r['pickws'], r['pickwurls']))
 	userpics['default'] = r['defaultpicurl']
 	
 	path = os.path.join(gSourceAccount.user, "userpics")
@@ -540,7 +548,8 @@ def main(retryMigrate = 0):
 	print >>f, """<?xml version="1.0"?>"""
 	print >>f, "<userpics>"
 	for p in userpics:
-		print >>f, """<userpic keyword="%s" url="%s" />""" % (p, userpics[p])
+		string = u'<userpic keyword="%s" url="%s" />' % (unicode(p, 'utf-8', 'replace'), userpics[p])
+		f.write(unicode(string))
 		r = urllib2.urlopen(userpics[p])
 		if r:
 			data = r.read()
@@ -781,17 +790,38 @@ def nukeall():
 			lastsync = item['time']
 	print "Deleted %d items." % (deleted, )
 	
+def usage():
+	print """ljmigrate.py
+no options: archive & migrate posts from one LJ account to another
+-n, --nuke : delete ALL posts in the specified account; see README for details
+-r, --retry : run through all posts on source, re-trying to migrate posts that
+              weren't migrated the first time
+-v, --version : print version
+-h, --help : print this usage info"""
+	version()
+
+
+def version():
+	print "ljmigrate.py version", __version__
+	sys.exit();
 	
 	
+
 if __name__ == '__main__':
 	try:
-		optlist, pargs = getopt.getopt(sys.argv[1:], 'nr', ['nuke', 'retry', ])
+		optlist, pargs = getopt.getopt(sys.argv[1:], 'nrhv', ['nuke', 'retry', 'help', 'version', ])
 	except getopt.GetoptError, e:
 		print e
 
 	options = {}
 	for pair in optlist:
 		options[pair[0]] = pair[1]
+	
+	if options.has_key('--help') or options.has_key('-h'):
+		usage()
+
+	if options.has_key('--version') or options.has_key('-v'):
+		version()
 	
 	retryMigrate = 0
 	if options.has_key('--retry') or options.has_key('-r'):

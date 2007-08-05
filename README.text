@@ -14,6 +14,19 @@ Version 1.3
 BSD licence mumbo-jumbo to follow. By which I mean, do what you want 
 with the source.
 
+To get usage information:
+	./ljmigrate --help 
+
+## Running new versions of the tools
+
+If you ran the tool once, migrated most of your posts, but failed to
+migrate some because of bugs, you might want to run a newer version but
+NOT re-migrate everything. Here's how to do that.
+
+The folder named after your account has all the interesting data in it.
+You can copy it and move it around. You can move it from the folder holding
+the *old* version of the tool into the new one. Run the new version. Tada!
+
 ## To use: expert version
 
 Edit the sample config options in ljmigrate.cfg.
