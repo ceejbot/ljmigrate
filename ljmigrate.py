@@ -34,15 +34,18 @@ import os
 import pickle
 import pprint
 import re
+import socket
 import sys
 import time
+import traceback
+import types
 import urllib2
 import xml.dom.minidom
 import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.3 070805a'
+__version__ = '1.3 070805b'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
@@ -67,6 +70,8 @@ def parsetime(input):
 class Account(object):
 
 	def __init__(self, host="", user="", password=""):
+		if host.endswith('/'):
+			host = host[:-1]
 		m = re.search("(.*)/interface/xmlrpc", host)
 		if m:
 			self.host = m.group(1)
@@ -104,7 +109,7 @@ class Account(object):
 		
 	def handleFlatResponse(self, response):
 		r = {}
-		while True:
+		while 1:
 			name = response.readline()
 			if len(name) == 0:
 				break
@@ -171,7 +176,7 @@ class Account(object):
 			params['props'] = entry['props']
 		else:
 			params['props'] = {}
-		params['props']['opt_backdated'] = True
+		params['props']['opt_backdated'] = 1
 		
 		timetuple = parsetime(entry['eventtime'])
 		if len(timetuple) < 5:
@@ -237,7 +242,7 @@ def dumpelement(f, name, e):
 		if isinstance(e[k], {}.__class__):
 			dumpelement(f, k, e[k])
 		else:
-			s = unicode(str(e[k]), "UTF-8")
+			s = unicode(str(e[k]), "UTF-8", 'replace')
 			f.write("<%s>%s</%s>\n" % (k, saxutils.escape(s), k))
 	f.write("</%s>\n" % name)
 
@@ -340,13 +345,13 @@ def fetchConfig():
 # html generation
 # poor man's html template; for generating correct html
 
-doctype = """<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+doctype = u"""<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
         "http://www.w3.org/TR/html4/loose.dtd">"""
 # substitution variables are: JournalName, Subject
-tmpl_start_jour = "<html>\n<head>\n<title>%s : %s</title></head>\n<body>\n"
+tmpl_start_jour = u"<html>\n<head>\n<title>%s : %s</title></head>\n<body>\n"
 # template start, subject only
-tmpl_start_nojour = "<html>\n<head>\n<title>%s</title></head>\n<body>\n"
-tmpl_end = "</body>\n</html>"
+tmpl_start_nojour = u"<html>\n<head>\n<title>%s</title></head>\n<body>\n"
+tmpl_end = u"</body>\n</html>"
 
 userpattern = re.compile(r'<lj user="([^"]*)">')
 commpattern = re.compile(r'<lj comm="([^"]*)">')
@@ -359,7 +364,12 @@ class Entry(object):
 	def __init__(self, dict, username):
 		self.journalname = username
 		for k in dict.keys():
-			self.__dict__[k] = dict[k]
+			if type(dict[k]) in [types.StringType, types.UnicodeType]:
+				self.__dict__[k] = dict[k].decode('utf-8', 'replace')
+			elif type(dict[k]) == types.InstanceType:
+				self.__dict__[k] = dict[k].data.decode('utf-8', 'replace')
+			else:
+				self.__dict__[k] = dict[k]
 		self.comments = []
 		self.commentids = {}
 		
@@ -376,9 +386,9 @@ class Entry(object):
 			else:
 				self.comments.append(comment)
 
-	def emitPost(self, path):
+	def emit(self, path):
 		if not hasattr(self, 'itemid'):
-			print "No item ID found in self.__dict__. Skipping:", entry
+			print "No item ID found in entry. Skipping:", entry
 			return
 		
 		if hasattr(self, 'props'):
@@ -393,17 +403,19 @@ class Entry(object):
 		else:
 			subject = "(No Subject)"
 		
-		result = doctype + tmpl_start_jour % (self.journalname, subject)
+		result = unicode(doctype + tmpl_start_jour % (self.journalname, subject))
 
 		if properties.has_key('picture_keyword'):
 			kw = properties['picture_keyword']
+			if type(kw) not in [types.StringType, types.UnicodeType]:
+				kw = kw.data.decode('utf-8', 'replace')
 		else:
 			kw = 'default'
 		if userPictHash.has_key(kw):
 			picpath = userPictHash[kw].replace(self.journalname, '..')
-			result = result + '<div id="picture_keyword" style="float:left; margin: 5px;"><img src="%s" alt="%s" title="%s" /></div>\n' % (picpath, kw, kw)
+			result = result + u'<div id="picture_keyword" style="float:left; margin: 5px;"><img src="%s" alt="%s" title="%s" /></div>\n' % (picpath, kw, kw)
 		else:
-			result = result + '<div id="picture_keyword"><b>Icon:</b> %s</div>\n' % (kw, )
+			result = result + u'<div id="picture_keyword"><b>Icon:</b> %s</div>\n' % (kw.encode('utf-8', 'replace'), )
 
 		for tag in entryprops:
 			if self.__dict__.has_key(tag):
@@ -418,7 +430,7 @@ class Entry(object):
 		
 		if hasattr(self, 'event'):
 			result = result + '<br clear="left" />\n'
-			content = unicode(self.event)
+			content = self.event
 			if not self.props.has_key('opt_preformatted'):
 				content = content.replace("\n", "<br />\n");
 			content = userpattern.sub(r'<b><a href="http://\1.livejournal.com/"><img src="http://stat.livejournal.com/img/userinfo.gif" alt="[info]" width="17" height="17" style="vertical-align: bottom; border: 0;" />\1</a></b>', content)
@@ -464,7 +476,12 @@ class Comment(object):
 		self.body = ''
 		self.date = ''
 		for k in dict.keys():
-			self.__dict__[k] = dict[k]
+			if type(dict[k]) in [types.StringType, types.UnicodeType]:
+				self.__dict__[k] = dict[k].decode('utf-8', 'replace')
+			elif type(dict[k]) == types.InstanceType:
+				self.__dict__[k] = dict[k].data.decode('utf-8', 'replace')
+			else:
+				self.__dict__[k] = dict[k]
 	
 	def addChild(self, child):
 		self.children.append(child)
@@ -475,7 +492,7 @@ class Comment(object):
 		result.append('<div class="comment" style="margin-left: %dem; border-left: 1px dotted gray; padding-top: 1em;">' % (3 * indent, ))
 		result.append('<b>%s</b>: %s<br />' % (self.user, self.subject))
 		result.append('<b>%s</b><br />' % self.date)
-		result.append(unicode(self.body))
+		result.append(self.body)
 		result.append('</div>')
 		
 		for child in self.children:
@@ -548,8 +565,9 @@ def main(retryMigrate = 0):
 	print >>f, """<?xml version="1.0"?>"""
 	print >>f, "<userpics>"
 	for p in userpics:
-		string = u'<userpic keyword="%s" url="%s" />' % (unicode(p, 'utf-8', 'replace'), userpics[p])
-		f.write(unicode(string))
+		kwd = p.decode('utf-8', 'replace')
+		print u'    Getting pic for keywords "%s"' % kwd.encode('ascii', 'replace')
+		f.write(u'<userpic keyword="%s" url="%s" />\n' % (kwd, userpics[p]))
 		r = urllib2.urlopen(userpics[p])
 		if r:
 			data = r.read()
@@ -558,7 +576,7 @@ def main(retryMigrate = 0):
 				picfn = os.path.join(path, "default.%s" % type)
 			else:
 				picfn = os.path.join(path, "%s.%s" % (canonicalizeFilename(p), type))
-			userPictHash[p] = picfn
+			userPictHash[kwd] = unicode(picfn, 'utf-8', 'replace')
 			picfp = open(picfn, 'w')
 			picfp.write(data)
 			picfp.close()
@@ -571,35 +589,51 @@ def main(retryMigrate = 0):
 		
 	migrationCount = 0
 		
-	while True:
+	while 1:
 		syncitems = gSourceAccount.getSyncItems(lastsync)
 		if len(syncitems) == 0:
 			break
 		for item in syncitems:
 			if item['item'][0] == 'L':
 				print "Fetching journal entry %s (%s)" % (item['item'], item['action'])
-				try:
-					entry = gSourceAccount.getOneEvent(item['item'][2:])
-					writedump(gSourceAccount.user, item['item'], 'entry', entry)
-					if gMigrate and gDestinationAccount:
+				keepTrying = 1
+				
+				while keepTrying:
+					try:
+						entry = gSourceAccount.getOneEvent(item['item'][2:])
+						writedump(gSourceAccount.user, item['item'], 'entry', entry)
+						if gMigrate and gDestinationAccount:
+						
+							if not entry_hash.has_key(item['item'][2:]):
+								print "    migrating journal entry..."
+								result = gDestinationAccount.postEntry(entry)
+								entry_hash[item['item'][2:]] = result.get('itemid', -1)
+								migrationCount += 1
+							elif item['action'] == 'update':
+								print "   updating migrated entry..."
+								result = gDestinationAccount.editEntry(entry, entry_hash[item['item'][2:]])
+	
+						if gGenerateHtml:
+							eobj = Entry(entry, gSourceAccount.user)
+							allEntries[item['item'][2:]] = eobj
+						newentries += 1
+						keepTrying = 0
+					except socket.gaierror, e:
+						print "Socket error. Double-check your account information, and your net connection."
+						keepTrying = 0
+					except exceptions.KeyboardInterrupt, e:
+						keepTrying = 0
+						# TODO cleanup
+						sys.exit()
+					except exceptions.Exception, x:
+						print "Error getting item: %s" % item['item']
+						traceback.print_exc(x, 5)
+						#pprint.pprint(x)
+						errors += 1
+						keepTrying = 0
 					
-						if not entry_hash.has_key(item['item'][2:]):
-							print "    migrating journal entry..."
-							result = gDestinationAccount.postEntry(entry)
-							entry_hash[item['item'][2:]] = result.get('itemid', -1)
-							migrationCount += 1
-						elif item['action'] == 'update':
-							print "   updating migrated entry..."
-							result = gDestinationAccount.editEntry(entry, entry_hash[item['item'][2:]])
-
-					if gGenerateHtml:
-						eobj = Entry(entry, gSourceAccount.user)
-						allEntries[item['item'][2:]] = eobj
-					newentries += 1
-				except exceptions.Exception, x:
-					print "Error getting item: %s" % item['item']
-					pprint.pprint(x)
-					errors += 1
+						
+						
 			elif item['item'].startswith('C-'):
 				commentsBy += 1
 				#print "Skipping comment %s by user (%s)" % (item['item'], item['action'])
@@ -633,7 +667,7 @@ def main(retryMigrate = 0):
 	print "Fetching journal comments for: %s" % gSourceAccount.user
 	
 	maxid = lastmaxid
-	while True:
+	while 1:
 		r = urllib2.urlopen(urllib2.Request(gSourceAccount.host+"/export_comments.bml?get=comment_meta&startid=%d" % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
 		meta = xml.dom.minidom.parse(r)
 		r.close()
@@ -666,7 +700,7 @@ def main(retryMigrate = 0):
 	
 	newmaxid = maxid
 	maxid = lastmaxid
-	while True:
+	while 1:
 		r = urllib2.urlopen(urllib2.Request(gSourceAccount.host+"/export_comments.bml?get=comment_body&startid=%d" % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
 		meta = xml.dom.minidom.parse(r)
 		r.close()
@@ -687,10 +721,10 @@ def main(retryMigrate = 0):
 				entry = xml.dom.minidom.parse("%s/C-%s" % (gSourceAccount.user, jitemid))
 			except:
 				entry = xml.dom.minidom.getDOMImplementation().createDocument(None, "comments", None)
-			found = False
+			found = 0
 			for d in entry.getElementsByTagName("comment"):
 				if int(d.getElementsByTagName("id")[0].firstChild.nodeValue) == id:
-					found = True
+					found = 1
 					break
 			if found:
 				print "Warning: downloaded duplicate comment id %d in jitemid %s" % (id, jitemid)
@@ -732,9 +766,10 @@ def main(retryMigrate = 0):
 		
 		for id in ids:
 			try:
-				allEntries[id].emitPost(htmlpath);
+				allEntries[id].emit(htmlpath);
 			except StandardError, e:
-				print "skipping post", id, " because of error:", str(e)
+				print "skipping post", id, "because of error:", str(e)
+				traceback.print_exc(5)
 			
 		emitIndex(htmlpath, firstTime)
 	
@@ -778,7 +813,7 @@ def nukeall():
 	lastsync = ""
 	deleted = 0
 	errors = 0
-	while True:
+	while 1:
 		syncitems = nukedAccount.getSyncItems(lastsync)
 		if len(syncitems) == 0:
 			break
@@ -790,6 +825,7 @@ def nukeall():
 			lastsync = item['time']
 	print "Deleted %d items." % (deleted, )
 	
+
 def usage():
 	print """ljmigrate.py
 no options: archive & migrate posts from one LJ account to another
@@ -812,6 +848,7 @@ if __name__ == '__main__':
 		optlist, pargs = getopt.getopt(sys.argv[1:], 'nrhv', ['nuke', 'retry', 'help', 'version', ])
 	except getopt.GetoptError, e:
 		print e
+		usage()
 
 	options = {}
 	for pair in optlist:
@@ -832,47 +869,3 @@ if __name__ == '__main__':
 	else:
 		main(retryMigrate)
 
-# ljdump.py - livejournal archiver
-# Greg Hewgill <greg@hewgill.com> http://hewgill.com
-# Version 1.2
-# $Id: ljdump.py 17 2006-09-08 08:46:56Z greg $
-#
-# This program reads the journal entries from a livejournal (or compatible)
-# blog site and archives them in a subdirectory named after the journal name.
-#
-# The configuration is read from "ljdump.config". A sample configuration is
-# provided in "ljdump.config.sample", which should be copied and then edited.
-# The configuration settings are:
-#
-#   server - The XMLRPC server URL. This should only need to be changed
-#			if you are dumping a journal that is livejournal-compatible
-#			but is not livejournal itself.
-#
-#   username - The livejournal user name. A subdirectory will be created
-#			  with this same name to store the journal entries.
-#
-#   password - The account password. This password is never sent in the
-#			  clear; the livejournal "challenge" password mechanism is used.
-#
-# This program may be run as often as needed to bring the backup copy up
-# to date. Both new and updated items are downloaded.
-#
-# LICENSE
-#
-# This software is provided 'as-is', without any express or implied
-# warranty.  In no event will the author be held liable for any damages
-# arising from the use of this software.
-#
-# Permission is granted to anyone to use this software for any purpose,
-# including commercial applications, and to alter it and redistribute it
-# freely, subject to the following restrictions:
-#
-# 1. The origin of this software must not be misrepresented; you must not
-#	claim that you wrote the original software. If you use this software
-#	in a product, an acknowledgment in the product documentation would be
-#	appreciated but is not required.
-# 2. Altered source versions must be plainly marked as such, and must not be
-#	misrepresented as being the original software.
-# 3. This notice may not be removed or altered from any source distribution.
-#
-# Copyright (c) 2005-2006 Greg Hewgill
