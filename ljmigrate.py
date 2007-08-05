@@ -580,6 +580,40 @@ class Comment(object):
 		
 		return '\n'.join(result)
 		
+def fetchItem(item):
+	global errors, allEntries, newentries
+	entry = None
+	keepTrying = 3
+	while keepTrying:
+		try:
+			entry = gSourceAccount.getOneEvent(item['item'][2:])
+			writedump(gSourceAccount.journal, item['item'], 'entry', entry)
+
+			if gGenerateHtml:
+				eobj = Entry(entry, gSourceAccount.user, gSourceAccount.journal)
+				allEntries[item['item'][2:]] = eobj
+			newentries += 1
+			keepTrying = 0
+
+		except socket.gaierror, e:
+			print "Socket error. Double-check your account information, and your net connection."
+			keepTrying = 0
+		except xmlrpclib.ProtocolError, e:
+			print "Error; retrying:", str(e)
+			keepTrying = keepTrying - 1
+		except exceptions.KeyboardInterrupt, e:
+			keepTrying = 0
+			# TODO cleanup
+			sys.exit()
+		except exceptions.Exception, x:
+			print "Error getting item: %s" % item['item']
+			traceback.print_exc(5)
+			#pprint.pprint(x)
+			errors += 1
+			keepTrying = 0
+	return entry
+
+		
 def synchronizeJournals(migrate = 0):
 
 	print "Fetching journal entries for: %s" % gSourceAccount.journal
@@ -587,14 +621,14 @@ def synchronizeJournals(migrate = 0):
 		os.makedirs(gSourceAccount.journal)
 		print "Created subdirectory: %s" % gSourceAccount.journal
 
-	if gGenerateHtml:
-		allEntries = {}
-	
+	global allEntries, errors, newentries  # HACK
+
+	allEntries = {}
+	errors = 0
 	migrationCount = 0
 	newentries = 0
 	newcomments = 0
 	commentsBy = 0
-	errors = 0
 	
 	lastsync = ""
 	lastmaxid = 0
@@ -636,34 +670,7 @@ def synchronizeJournals(migrate = 0):
 		for item in syncitems:
 			if item['item'][0] == 'L':
 				print "Fetching journal entry %s (%s)" % (item['item'], item['action'])
-
-				keepTrying = 5
-				while keepTrying:
-					try:
-						entry = gSourceAccount.getOneEvent(item['item'][2:])
-						writedump(gSourceAccount.journal, item['item'], 'entry', entry)
-
-						if gGenerateHtml:
-							eobj = Entry(entry, gSourceAccount.user, gSourceAccount.journal)
-							allEntries[item['item'][2:]] = eobj
-						newentries += 1
-						keepTrying = 0
-
-					except socket.gaierror, e:
-						print "Socket error. Double-check your account information, and your net connection."
-						keepTrying = 0
-					except exceptions.KeyboardInterrupt, e:
-						keepTrying = 0
-						# TODO cleanup
-						sys.exit()
-					except exceptions.Exception, x:
-						print "Error getting item: %s" % item['item']
-						traceback.print_exc(5)
-						#pprint.pprint(x)
-						errors += 1
-						keepTrying = 0
-						entry = None
-
+				entry = fetchItem(item)
 				
 				if considerMigrating and entry and (not entry.has_key('poster') or entry['poster'] == gSourceAccount.user or not gMigrateOwnOnly):
 					keepTrying = 5
@@ -677,12 +684,12 @@ def synchronizeJournals(migrate = 0):
 							elif item['action'] == 'update':
 								print "   updating migrated entry in", gDestinationAccount.journal
 								result = gDestinationAccount.editEntry(entry, entry_hash[item['item'][2:]])
+								migrationCount += 1
 							keepTrying = 0
 						except socket.gaierror, e:
 							print "Socket error. Double-check your account information, and your net connection."
 							keepTrying = 0
 						except exceptions.KeyboardInterrupt, e:
-							keepTrying = 0
 							# TODO cleanup
 							sys.exit()
 						except xmlrpclib.Fault, e:
@@ -697,6 +704,10 @@ def synchronizeJournals(migrate = 0):
 									badprop = matches.group(1)
 									del entry['props'][badprop]
 									keepTrying -= 1
+							elif code == 302:
+								print e.faultString
+								print "Something's out of sync."
+								keepTrying = 0
 							else:
 								traceback.print_exc(5)
 								# faultString
@@ -869,7 +880,7 @@ def main(retryMigrate = 0):
 		print "Created subdirectory: %s" % gSourceAccount.user
 	
 	gSourceAccount.makeSession()
-	# gSourceAccount.fetchUserPics()
+	gSourceAccount.fetchUserPics()
 	# first run does the basics
 	synchronizeJournals(gMigrate)
 	
