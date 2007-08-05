@@ -4,6 +4,7 @@
 migrate: True
 # generate html for each entry? True or False
 generate-html: True
+migrate-community-posts-by-others: 0
 
 [source]
 # The host of the journal you're backing up.
@@ -13,11 +14,13 @@ user: myusername
 # Your password. Will not be sent in the clear; this tool uses the challenge
 # response authentication mechanism.
 password: mypassword
+# communities:
 
 [destination]
 server: http://insanejournal.com
 user: myotheruser
 password: myotherpassword
+# communities:
 
 # [nuke]
 # option section for the nuclear option; see README for details

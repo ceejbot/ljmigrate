@@ -1,28 +1,13 @@
 #!/usr/bin/env python
 
 """
-Based on ljdump; original ljdump license & header at the bottom of this file.
+Based on ljdump; original ljdump license & header in LICENCE.text.
 Extensive modifications by antennapedia.
 Version 1.3
 3 August 2007
 
-BSD licence mumbo-jumbo to follow. By which I mean, do what you want.
-
-- uses Configparser instead of xml for config, since we are not insane
-- dumps to a directory structure like this:
-  username/
-  	entry000001
-  		entry.xml
-  		comments.xml
-  	entry000002
-  		entry.xml
-  		comments.xml
-  	userpics
-  		keyword1.jpeg
-  		keyword2.png
-  	metadata/
-  		(cache info, including the last time we synced)
-	
+BSD licence mumbo-jumbo to follow. By which I mean, do what you want.s
+See README.text for documentation.
 """
 
 import codecs
@@ -45,20 +30,19 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.3 070805b'
+__version__ = '1.3 070805c'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
 configpath = "ljmigrate.cfg"
 
 
-# lj's time format
-# 2004-08-11 13:38:00
-ljTimeFormat = '%Y-%m-%d %H:%M:%S'
-
 # hackity hack
 global gSourceAccount, gDestinationAccount, gMigrate, gGenerateHtml
 userPictHash = {}
+
+# lj's time format: 2004-08-11 13:38:00
+ljTimeFormat = '%Y-%m-%d %H:%M:%S'
 
 def parsetime(input):
 	try:
@@ -83,18 +67,21 @@ class Account(object):
 		self.flat_api = self.host + "/interface/flat"
 		self.server_proxy = xmlrpclib.ServerProxy(self.host+"/interface/xmlrpc")
 		self.session = ""
-		
-		self.metapath = os.path.join(user, "metadata")
+		self.journal = user
+		self.journal_list = []
+	
+	def metapath(self):
+		return os.path.join(self.journal, "metadata")
 		
 	def openMetadataFile(self, name):
 		""" Convenience. """
-		if not os.path.exists(self.metapath):
-			os.makedirs(self.metapath)
-		fp = codecs.open(os.path.join(self.metapath, name), 'w', 'utf-8', 'replace')
+		if not os.path.exists(self.metapath()):
+			os.makedirs(self.metapath())
+		fp = codecs.open(os.path.join(self.metapath(), name), 'w', 'utf-8', 'replace')
 		return fp
 	
 	def readMetaDataFile(self, name):
-		fp = codecs.open(os.path.join(self.metapath, name), 'r', 'utf-8', 'replace')
+		fp = codecs.open(os.path.join(self.metapath(), name), 'r', 'utf-8', 'replace')
 		return fp
 
 	def makeSession(self):
@@ -106,7 +93,7 @@ class Account(object):
 		response = self.handleFlatResponse(r)
 		r.close()
 		self.session = response['ljsession']
-		
+
 	def handleFlatResponse(self, response):
 		r = {}
 		while 1:
@@ -134,39 +121,52 @@ class Account(object):
 		return md5.new(challenge+md5.new(self.password).hexdigest()).hexdigest()
 		
 	def getUserPics(self):
-		resp = self.server_proxy.LJ.XMLRPC.login(self.doChallenge({
+		params = {
 			'username': self.user,
 			'ver': 1,
 			'getpickws': 1,
 			'getpickwurls': 1,
-		}))
+		}
+		if self.journal != self.user:
+			params['usejournal'] = self.journal
+		params = self.doChallenge(params)
+		resp = self.server_proxy.LJ.XMLRPC.login(params)
 		return resp
 	
 	def getSyncItems(self, lastsync):
-		r = self.server_proxy.LJ.XMLRPC.syncitems(self.doChallenge({
+		params = {
 			'username': self.user,
 			'ver': 1,
 			'lastsync': lastsync,
-		} ))
-		#pprint.pprint(r)
+		}
+		if self.journal != self.user:
+			params['usejournal'] = self.journal
+
+		params = self.doChallenge(params)
+		r = self.server_proxy.LJ.XMLRPC.syncitems(params)
 		return r['syncitems']
 		
 	def getOneEvent(self, itemid):
-		e = self.server_proxy.LJ.XMLRPC.getevents(self.doChallenge({
+		params = {
 			'username': self.user,
 			'ver': 1,
 			'selecttype': "one",
 			'itemid': itemid,
-		}))
+		}
+		if self.journal != self.user:
+			params['usejournal'] = self.journal
+		
+		params = self.doChallenge(params)
+		e = self.server_proxy.LJ.XMLRPC.getevents(params)
 		return e['events'][0]
 		
 	def postEntry(self, entry):
-		#pprint.pprint(entry)
 		params = {
 			'username': self.user,
 			'ver': 1,
 			'lineendings': 'unix',
 		}
+		
 		if entry.has_key('subject'): params['subject'] = entry['subject']
 		if entry.has_key('event'): params['event'] = entry['event']
 		if entry.has_key('security'): params['security'] = entry['security']
@@ -176,7 +176,12 @@ class Account(object):
 			params['props'] = entry['props']
 		else:
 			params['props'] = {}
-		params['props']['opt_backdated'] = 1
+
+		if self.journal != self.user:
+			params['usejournal'] = self.journal
+		else:
+			# LJ does not allow you to create backdated entries in communities
+			params['props']['opt_backdated'] = 1
 		
 		timetuple = parsetime(entry['eventtime'])
 		if len(timetuple) < 5:
@@ -200,6 +205,9 @@ class Account(object):
 			'itemid': destid,
 		}
 
+		if self.journal != self.user:
+			params['usejournal'] = self.journal
+		
 		if entry.has_key('subject'): params['subject'] = entry['subject']
 		if entry.has_key('event'): params['event'] = entry['event']
 		if entry.has_key('security'): params['security'] = entry['security']
@@ -232,6 +240,44 @@ class Account(object):
 		params = self.doChallenge(params)
 		result = self.server_proxy.LJ.XMLRPC.editevent(params)
 		return result
+		
+	def fetchUserPics(self):
+		print "Fetching userpics for: %s" % self.user
+	
+		r = self.getUserPics()
+		userpics = {}
+		for i in range(0, len(r['pickws'])):
+			userpics[str(r['pickws'][i])] = r['pickwurls'][i]
+		#userpics = dict(zip(r['pickws'], r['pickwurls']))
+		userpics['default'] = r['defaultpicurl']
+		
+		path = os.path.join(self.user, "userpics")
+		if not os.path.exists(path):
+			os.makedirs(path)
+		f = self.openMetadataFile("userpics.xml")
+		print >>f, """<?xml version="1.0"?>"""
+		print >>f, "<userpics>"
+		for p in userpics:
+			kwd = p.decode('utf-8', 'replace')
+			print u'    Getting pic for keywords "%s"' % kwd.encode('ascii', 'replace')
+			f.write(u'<userpic keyword="%s" url="%s" />\n' % (kwd, userpics[p]))
+			try:
+				r = urllib2.urlopen(userpics[p])
+				if r:
+					data = r.read()
+					type = imghdr.what(r, data)
+					if p == "*":
+						picfn = os.path.join(path, "default.%s" % type)
+					else:
+						picfn = os.path.join(path, "%s.%s" % (canonicalizeFilename(p), type))
+					userPictHash[kwd] = unicode(picfn, 'utf-8', 'replace')
+					picfp = open(picfn, 'w')
+					picfp.write(data)
+					picfp.close()
+			except:
+				pass
+		print >>f, "</userpics>"
+		f.close()
 
 
 ###
@@ -287,7 +333,7 @@ def canonicalizeFilename(input):
 
 
 def fetchConfig():
-	global gSourceAccount, gDestinationAccount, gMigrate, gGenerateHtml
+	global gSourceAccount, gDestinationAccount, gMigrate, gGenerateHtml, gMigrateOwnOnly
 	try:
 		cfparser = ConfigParser.SafeConfigParser()
 	except StandardError, e:
@@ -311,12 +357,27 @@ def fetchConfig():
 		print "The tool can't run without a source journal set." 
 		print "Copy the sample config and try again."
 		sys.exit()
-
+	
+	try:
+		jrn = cfparser.get('source', 'communities').strip()
+		if len(jrn) > 0:
+			gSourceAccount.journal_list = re.split(', |,| ', jrn)
+	except ConfigParser.NoOptionError, e:
+		pass
+		
 	gMigrate = 0
 	try:
 		item = cfparser.get('settings', 'migrate')
 		if item.lower() not in ['false', 'no', '0']:
 			gMigrate = 1
+	except ConfigParser.NoOptionError, e:
+		pass
+
+	gMigrateOwnOnly = 1
+	try:
+		item = cfparser.get('settings', 'migrate-community-posts-by-others')
+		if item.lower() in ['true', 'yes', '1']:
+			gMigrateOwnOnly = 0
 	except ConfigParser.NoOptionError, e:
 		pass
 
@@ -332,6 +393,12 @@ def fetchConfig():
 			print "We can't migrate without knowing the information for the destination." 
 			print "Copy the sample config and try again."
 			sys.exit()
+		try:
+			jrn = cfparser.get('destination', 'communities').strip()
+			if len(jrn) > 0: gDestinationAccount.journal_list = re.split(', |,| ', jrn)
+		except ConfigParser.NoOptionError, e:
+			pass
+
 
 	gGenerateHtml = 1
 	try:
@@ -361,8 +428,12 @@ indexEntries = []
 entryprops = ['journalname', 'subject', 'eventtime', 'itemid', 'GroupMask', 'SecurityMode']
 
 class Entry(object):
-	def __init__(self, dict, username):
-		self.journalname = username
+	def __init__(self, dict, username, journalname=None):
+		self.username = username
+		if journalname:
+			self.journalname = journalname
+		else:
+			self.journalname = username
 		for k in dict.keys():
 			if type(dict[k]) in [types.StringType, types.UnicodeType]:
 				self.__dict__[k] = dict[k].decode('utf-8', 'replace')
@@ -415,7 +486,7 @@ class Entry(object):
 			picpath = userPictHash[kw].replace(self.journalname, '..')
 			result = result + u'<div id="picture_keyword" style="float:left; margin: 5px;"><img src="%s" alt="%s" title="%s" /></div>\n' % (picpath, kw, kw)
 		else:
-			result = result + u'<div id="picture_keyword"><b>Icon:</b> %s</div>\n' % (kw.encode('utf-8', 'replace'), )
+			result = result + u'<div id="picture_keyword"><b>Icon:</b> %s</div>\n' % (kw, )
 
 		for tag in entryprops:
 			if self.__dict__.has_key(tag):
@@ -499,20 +570,18 @@ class Comment(object):
 			result.append(child.emit(indent + 1))
 		
 		return '\n'.join(result)
+		
+def synchronizeJournals(migrate = 0):
 
+	print "Fetching journal entries for: %s" % gSourceAccount.journal
+	if not os.path.exists(gSourceAccount.journal):
+		os.makedirs(gSourceAccount.journal)
+		print "Created subdirectory: %s" % gSourceAccount.journal
 
-def main(retryMigrate = 0):
-	""" TODO: This is very ugly. Needs refactoring.
-	"""
-	fetchConfig()
-
-	print "Fetching journal entries for: %s" % gSourceAccount.user
-	if not os.path.exists(gSourceAccount.user):
-		os.makedirs(gSourceAccount.user)
-		print "Created subdirectory: %s" % gSourceAccount.user
+	if gGenerateHtml:
+		allEntries = {}
 	
-	gSourceAccount.makeSession()
-	
+	migrationCount = 0
 	newentries = 0
 	newcomments = 0
 	commentsBy = 0
@@ -548,47 +617,7 @@ def main(retryMigrate = 0):
 		f.close()
 	except:
 		entry_hash = {}
-		
-	print "Fetching userpics for: %s" % gSourceAccount.user
 
-	r = gSourceAccount.getUserPics()
-	userpics = {}
-	for i in range(0, len(r['pickws'])):
-		userpics[str(r['pickws'][i])] = r['pickwurls'][i]
-	#userpics = dict(zip(r['pickws'], r['pickwurls']))
-	userpics['default'] = r['defaultpicurl']
-	
-	path = os.path.join(gSourceAccount.user, "userpics")
-	if not os.path.exists(path):
-		os.makedirs(path)
-	f = gSourceAccount.openMetadataFile("userpics.xml")
-	print >>f, """<?xml version="1.0"?>"""
-	print >>f, "<userpics>"
-	for p in userpics:
-		kwd = p.decode('utf-8', 'replace')
-		print u'    Getting pic for keywords "%s"' % kwd.encode('ascii', 'replace')
-		f.write(u'<userpic keyword="%s" url="%s" />\n' % (kwd, userpics[p]))
-		r = urllib2.urlopen(userpics[p])
-		if r:
-			data = r.read()
-			type = imghdr.what(r, data)
-			if p == "*":
-				picfn = os.path.join(path, "default.%s" % type)
-			else:
-				picfn = os.path.join(path, "%s.%s" % (canonicalizeFilename(p), type))
-			userPictHash[kwd] = unicode(picfn, 'utf-8', 'replace')
-			picfp = open(picfn, 'w')
-			picfp.write(data)
-			picfp.close()
-	print >>f, "</userpics>"
-	f.close()
-	
-
-	if gGenerateHtml:
-		allEntries = {}
-		
-	migrationCount = 0
-		
 	while 1:
 		syncitems = gSourceAccount.getSyncItems(lastsync)
 		if len(syncitems) == 0:
@@ -601,20 +630,20 @@ def main(retryMigrate = 0):
 				while keepTrying:
 					try:
 						entry = gSourceAccount.getOneEvent(item['item'][2:])
-						writedump(gSourceAccount.user, item['item'], 'entry', entry)
-						if gMigrate and gDestinationAccount:
-						
+						writedump(gSourceAccount.journal, item['item'], 'entry', entry)
+	
+						if migrate and gDestinationAccount and (not entry.has_key('poster') or entry['poster'] == gSourceAccount.user or not gMigrateOwnOnly):
 							if not entry_hash.has_key(item['item'][2:]):
-								print "    migrating journal entry..."
+								print "    migrating entry to", gDestinationAccount.journal
 								result = gDestinationAccount.postEntry(entry)
 								entry_hash[item['item'][2:]] = result.get('itemid', -1)
 								migrationCount += 1
 							elif item['action'] == 'update':
-								print "   updating migrated entry..."
+								print "   updating migrated entry in", gDestinationAccount.journal
 								result = gDestinationAccount.editEntry(entry, entry_hash[item['item'][2:]])
 	
 						if gGenerateHtml:
-							eobj = Entry(entry, gSourceAccount.user)
+							eobj = Entry(entry, gSourceAccount.user, gSourceAccount.journal)
 							allEntries[item['item'][2:]] = eobj
 						newentries += 1
 						keepTrying = 0
@@ -627,160 +656,186 @@ def main(retryMigrate = 0):
 						sys.exit()
 					except exceptions.Exception, x:
 						print "Error getting item: %s" % item['item']
-						traceback.print_exc(x, 5)
+						traceback.print_exc(5)
 						#pprint.pprint(x)
 						errors += 1
 						keepTrying = 0
 					
-						
-						
 			elif item['item'].startswith('C-'):
 				commentsBy += 1
 				#print "Skipping comment %s by user (%s)" % (item['item'], item['action'])
 			else:
 				pprint.pprint(item)
 			lastsync = item['time']
-	
-	if migrationCount == 1:
-		"One entry migrated or updated on destination."
-	else:
-		print "%d entries migrated or updated on destination." % (migrationCount, )
-	
-	f = gSourceAccount.openMetadataFile('entry_correspondences.hash')
-	pickle.dump(entry_hash, f)
-	f.close()
 
-	try:
-		f = gSourceAccount.readMetaDataFile('comment.meta')
-		metacache = pickle.load(f)
-		f.close()
-	except:
-		metacache = {}
-	
-	try:
-		f = gSourceAccount.readMetaDataFile('user.map')
-		usermap = pickle.load(f)
-		f.close()
-	except:
-		usermap = {}
-	
-	print "Fetching journal comments for: %s" % gSourceAccount.user
-	
-	maxid = lastmaxid
-	while 1:
-		r = urllib2.urlopen(urllib2.Request(gSourceAccount.host+"/export_comments.bml?get=comment_meta&startid=%d" % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
-		meta = xml.dom.minidom.parse(r)
-		r.close()
-		for c in meta.getElementsByTagName("comment"):
-			id = int(c.getAttribute("id"))
-			metacache[id] = {
-				'posterid': c.getAttribute("posterid"),
-				'state': c.getAttribute("state"),
-			}
-			if id > maxid:
-				maxid = id
-		for u in meta.getElementsByTagName("usermap"):
-			usermap[u.getAttribute("id")] = u.getAttribute("user")
-		if maxid >= int(meta.getElementsByTagName("maxid")[0].firstChild.nodeValue):
-			break
-	
-	# checkpoint
-	f = gSourceAccount.openMetadataFile('last_sync')
-	f.write("%s\n" % lastsync)
-	f.write("%s\n" % lastmaxid)
-	f.close()
-
-	f = gSourceAccount.openMetadataFile('comment.meta')
-	pickle.dump(metacache, f)
-	f.close()
-	
-	f = gSourceAccount.openMetadataFile('user.map')
-	pickle.dump(usermap, f)
-	f.close()
-	
-	newmaxid = maxid
-	maxid = lastmaxid
-	while 1:
-		r = urllib2.urlopen(urllib2.Request(gSourceAccount.host+"/export_comments.bml?get=comment_body&startid=%d" % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
-		meta = xml.dom.minidom.parse(r)
-		r.close()
-		for c in meta.getElementsByTagName("comment"):
-			id = int(c.getAttribute("id"))
-			jitemid = c.getAttribute("jitemid")
-			comment = {
-				'id': str(id),
-				'parentid': c.getAttribute("parentid"),
-				'subject': gettext(c.getElementsByTagName("subject")),
-				'date': gettext(c.getElementsByTagName("date")),
-				'body': gettext(c.getElementsByTagName("body")),
-				'state': metacache[id]['state'],
-			}
-			if usermap.has_key(c.getAttribute("posterid")):
-				comment["user"] = usermap[c.getAttribute("posterid")]
-			try:
-				entry = xml.dom.minidom.parse("%s/C-%s" % (gSourceAccount.user, jitemid))
-			except:
-				entry = xml.dom.minidom.getDOMImplementation().createDocument(None, "comments", None)
-			found = 0
-			for d in entry.getElementsByTagName("comment"):
-				if int(d.getElementsByTagName("id")[0].firstChild.nodeValue) == id:
-					found = 1
-					break
-			if found:
-				print "Warning: downloaded duplicate comment id %d in jitemid %s" % (id, jitemid)
-			else:
-				if allEntries.has_key(jitemid):
-					cmt = Comment(comment)
-					allEntries[jitemid].addComment(cmt)
-				entry.documentElement.appendChild(createxml(entry, "comment", comment))				
-				path = os.path.join(gSourceAccount.user, makeItemName(jitemid, 'entry'))
-				if not os.path.exists(path):
-					os.makedirs(path)
-				f = codecs.open(os.path.join(path, "comments.xml"), "w", "UTF-8")
-				entry.writexml(f)
-				f.close()
-				newcomments += 1
-			if id > maxid:
-				maxid = id
-		if maxid >= newmaxid:
-			break
-	
-	lastmaxid = maxid
-	
-	f = gSourceAccount.openMetadataFile('last_sync')
-	f.write("%s\n" % lastsync)
-	f.write("%s\n" % lastmaxid)
-	f.close()
-		
-	if gGenerateHtml:
-		print "Now generating a simple html version of your posts + comments."
-		htmlpath = os.path.join(gSourceAccount.user, 'html')
-		if not os.path.exists(htmlpath):
-			firstTime = 1
-			os.makedirs(htmlpath)
+		if migrationCount == 1:
+			"One entry migrated or updated on destination."
 		else:
-			firstTime = 0
+			print "%d entries migrated or updated on destination." % (migrationCount, )
 		
-		ids = allEntries.keys()
-		ids.sort()
-		
-		for id in ids:
-			try:
-				allEntries[id].emit(htmlpath);
-			except StandardError, e:
-				print "skipping post", id, "because of error:", str(e)
-				traceback.print_exc(5)
-			
-		emitIndex(htmlpath, firstTime)
+		f = gSourceAccount.openMetadataFile('entry_correspondences.hash')
+		pickle.dump(entry_hash, f)
+		f.close()
 	
-	print "Local archive complete!"
+		try:
+			f = gSourceAccount.readMetaDataFile('comment.meta')
+			metacache = pickle.load(f)
+			f.close()
+		except:
+			metacache = {}
+		
+		try:
+			f = gSourceAccount.readMetaDataFile('user.map')
+			usermap = pickle.load(f)
+			f.close()
+		except:
+			usermap = {}
+		
+		print "Fetching journal comments for: %s" % gSourceAccount.journal
+		
+		maxid = lastmaxid
+		while 1:
+			r = urllib2.urlopen(urllib2.Request(gSourceAccount.host+"/export_comments.bml?get=comment_meta&startid=%d" % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
+			meta = xml.dom.minidom.parse(r)
+			r.close()
+			for c in meta.getElementsByTagName("comment"):
+				id = int(c.getAttribute("id"))
+				metacache[id] = {
+					'posterid': c.getAttribute("posterid"),
+					'state': c.getAttribute("state"),
+				}
+				if id > maxid:
+					maxid = id
+			for u in meta.getElementsByTagName("usermap"):
+				usermap[u.getAttribute("id")] = u.getAttribute("user")
+			if maxid >= int(meta.getElementsByTagName("maxid")[0].firstChild.nodeValue):
+				break
+		
+		# checkpoint
+		f = gSourceAccount.openMetadataFile('last_sync')
+		f.write("%s\n" % lastsync)
+		f.write("%s\n" % lastmaxid)
+		f.close()
+	
+		f = gSourceAccount.openMetadataFile('comment.meta')
+		pickle.dump(metacache, f)
+		f.close()
+		
+		f = gSourceAccount.openMetadataFile('user.map')
+		pickle.dump(usermap, f)
+		f.close()
+		
+		newmaxid = maxid
+		maxid = lastmaxid
+		
+		if gSourceAccount.user == gSourceAccount.journal:
+			# hackity. haven't yet figured out how to get community comments
+			while 1:
+				r = urllib2.urlopen(urllib2.Request(gSourceAccount.host+"/export_comments.bml?get=comment_body&startid=%d" % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
+				meta = xml.dom.minidom.parse(r)
+				r.close()
+				for c in meta.getElementsByTagName("comment"):
+					id = int(c.getAttribute("id"))
+					jitemid = c.getAttribute("jitemid")
+					comment = {
+						'id': str(id),
+						'parentid': c.getAttribute("parentid"),
+						'subject': gettext(c.getElementsByTagName("subject")),
+						'date': gettext(c.getElementsByTagName("date")),
+						'body': gettext(c.getElementsByTagName("body")),
+						'state': metacache[id]['state'],
+					}
+					if usermap.has_key(c.getAttribute("posterid")):
+						comment["user"] = usermap[c.getAttribute("posterid")]
+					try:
+						entry = xml.dom.minidom.parse("%s/C-%s" % (gSourceAccount.journal, jitemid))
+					except:
+						entry = xml.dom.minidom.getDOMImplementation().createDocument(None, "comments", None)
+					found = 0
+					for d in entry.getElementsByTagName("comment"):
+						if int(d.getElementsByTagName("id")[0].firstChild.nodeValue) == id:
+							found = 1
+							break
+					if found:
+						print "Warning: downloaded duplicate comment id %d in jitemid %s" % (id, jitemid)
+					else:
+						if allEntries.has_key(jitemid):
+							cmt = Comment(comment)
+							allEntries[jitemid].addComment(cmt)
+						entry.documentElement.appendChild(createxml(entry, "comment", comment))				
+						path = os.path.join(gSourceAccount.journal, makeItemName(jitemid, 'entry'))
+						if not os.path.exists(path):
+							os.makedirs(path)
+						f = codecs.open(os.path.join(path, "comments.xml"), "w", "UTF-8")
+						entry.writexml(f)
+						f.close()
+						newcomments += 1
+					if id > maxid:
+						maxid = id
+				if maxid >= newmaxid:
+					break
+		
+		lastmaxid = maxid
+		
+		f = gSourceAccount.openMetadataFile('last_sync')
+		f.write("%s\n" % lastsync)
+		f.write("%s\n" % lastmaxid)
+		f.close()
+			
+		if gGenerateHtml:
+			print "Now generating a simple html version of your posts + comments."
+			htmlpath = os.path.join(gSourceAccount.journal, 'html')
+			if not os.path.exists(htmlpath):
+				firstTime = 1
+				os.makedirs(htmlpath)
+			else:
+				firstTime = 0
+			
+			ids = allEntries.keys()
+			ids.sort()
+			
+			for id in ids:
+				try:
+					allEntries[id].emit(htmlpath);
+				except StandardError, e:
+					print "skipping post", id, "because of error:", str(e)
+					traceback.print_exc(5)
+				
+			emitIndex(htmlpath, firstTime)
+		
+		print "Local archive complete!"
+	
+		if origlastsync:
+			print "%d new entries, %d new comments (since %s),  %d new comments by user" % (newentries, newcomments, origlastsync, commentsBy)
+		else:
+			print "%d entries, %d comments, %d comments by user" % (newentries, newcomments, commentsBy)
+		if errors > 0:
+			print "%d errors" % errors
 
-	if origlastsync:
-		print "%d new entries, %d new comments (since %s),  %d new comments by user, %d userpics" % (newentries, newcomments, origlastsync, commentsBy, len(userpics))
-	else:
-		print "%d entries, %d comments, %d comments by user, %d userpics" % (newentries, newcomments, commentsBy, len(userpics))
-	if errors > 0:
-		print "%d errors" % errors
+
+
+def main(retryMigrate = 0):
+	fetchConfig()
+
+	if not os.path.exists(gSourceAccount.user):
+		os.makedirs(gSourceAccount.user)
+		print "Created subdirectory: %s" % gSourceAccount.user
+	
+	gSourceAccount.makeSession()
+	gSourceAccount.fetchUserPics()
+	# first run does the basics
+	synchronizeJournals(gMigrate)
+	
+	accounts = map(None, gSourceAccount.journal_list, gDestinationAccount.journal_list)
+	for pair in accounts:
+		gSourceAccount.journal = pair[0]
+		if pair[1]:
+			gDestinationAccount.journal = pair[1]
+			synchronizeJournals(1)
+		else:
+			synchronizeJournals(0)
+	
+	
 		
 def nukeall():
 	try:
@@ -803,7 +858,7 @@ def nukeall():
 	if confirm != 'Y':
 		print "Safe choice."
 		sys.exit()
-	confirm = raw_input('Are you really REALLY sure? All entries for %s/%s will be gone. [n/Y] ' % (nukedAccount.host, nukedAccount.user))
+	confirm = raw_input('Are you really REALLY sure?\nAll entries for %s/%s will be gone. [n/Y] ' % (nukedAccount.host, nukedAccount.user))
 	if confirm != 'Y':
 		print "Safe choice."
 		sys.exit()
