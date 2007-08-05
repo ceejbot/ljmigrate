@@ -14,13 +14,13 @@ user: myusername
 # Your password. Will not be sent in the clear; this tool uses the challenge
 # response authentication mechanism.
 password: mypassword
-# communities:
+# communities: sourcecomm1 sourcecomm2
 
 [destination]
 server: http://insanejournal.com
 user: myotheruser
 password: myotherpassword
-# communities:
+# communities: destcomm1 destcomm2
 
 # [nuke]
 # option section for the nuclear option; see README for details

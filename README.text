@@ -57,6 +57,7 @@ This will skip entries it successfully moved before.
 	[settings]
 	migrate: True
 	generate-html: True
+	migrate-community-posts-by-others: False
 	
   migrate: can be True or False. Set this to True if you want the tool to
   copy all your journal entries to another system.
@@ -136,6 +137,39 @@ The tool can't migrate your userpics, because the LiveJournal API
 provides no way to add or edit icons. You'll need to upload them by
 hand. The image files in userpics/ are named by keyword, to help. Spaces
 are replaced by _ (underbar) for various geeky reasons.
+
+## Migrating communities
+
+This feature is a work in progress, and will get easier to use very soon.
+In your config sections for "source" and "destination", add the names of
+the communities you want to back up or migrate:
+
+	[source]
+	server: http://insanejournal.com
+	user: user_to_nuke
+	password: the_password
+	communities: pony_fans cardboard_fans comm_to_archive_and_not_move
+
+	[destination]
+	server: http://insanejournal.com
+	user: my_new_user
+	password: the_password
+	communities: pony_asylum cardboard_fans 
+
+All three communities will be archived, and these migrations will happen:
+pony_fans => pony_asylum
+cardboard_fans => cardboard_fans
+comm_to_archive_and_not_move not migrated
+
+NOTE! You'll be the poster of any migrated community entries. By default the
+script will migrate ONLY your own posts. If you want to migrate everything and
+don't care that you'll be the poster on the other end, set this option:
+
+	[settings]
+	migrate-community-posts-by-others: 1
+	
+Feature not very well tested yet.
+
 
 ## Secret nuclear option
 
