@@ -30,7 +30,7 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.3 070805f Sun Aug  5 22:19:39 PDT 2007'
+__version__ = '1.3 070805g'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
@@ -423,9 +423,9 @@ def fetchConfig():
 doctype = u"""<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
         "http://www.w3.org/TR/html4/loose.dtd">"""
 # substitution variables are: JournalName, Subject
-tmpl_start_jour = u"<html>\n<head>\n<title>%s : %s</title></head>\n<body>\n"
+tmpl_start_jour = u'<html>\n<head>\n<meta http-equiv="content-type" content="text-html; charset=UTF-8" />\n<title>%s : %s</title></head>\n<body>\n'
 # template start, subject only
-tmpl_start_nojour = u"<html>\n<head>\n<title>%s</title></head>\n<body>\n"
+tmpl_start_nojour = u'<html>\n<head>\n<meta http-equiv="content-type" content="text-html; charset=UTF-8" />\n<title>%s</title></head>\n<body>\n'
 tmpl_end = u"</body>\n</html>"
 
 userpattern = re.compile(r'<lj user="([^"]*)">')
