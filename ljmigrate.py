@@ -30,7 +30,7 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.3 070805e'
+__version__ = '1.3 070805e Sun Aug  5 21:43:21 PDT 2007'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
@@ -505,7 +505,7 @@ class Entry(object):
 		
 		if hasattr(self, 'event'):
 			result = result + '<br clear="left" />\n'
-			content = self.event
+			content = self.event.decode('utf-8', 'replace')
 			if not self.props.has_key('opt_preformatted'):
 				content = content.replace("\n", "<br />\n");
 			content = userpattern.sub(r'<b><a href="http://\1.livejournal.com/"><img src="http://stat.livejournal.com/img/userinfo.gif" alt="[info]" width="17" height="17" style="vertical-align: bottom; border: 0;" />\1</a></b>', content)
@@ -516,6 +516,7 @@ class Entry(object):
 		# emit comments
 		self.buildCommentTree()
 		for c in self.comments:
+			result = result + "<hr />\n"
 			result = result + c.emit().encode('utf-8', 'replace')
 	
 		result = result + tmpl_end
@@ -742,149 +743,149 @@ def synchronizeJournals(migrate = 0):
 				pprint.pprint(item)
 			lastsync = item['time']
 
-		if migrationCount == 1:
-			"One entry migrated or updated on destination."
-		else:
-			print "%d entries migrated or updated on destination." % (migrationCount, )
-		
-		f = gSourceAccount.openMetadataFile('entry_correspondences.hash', 0)
-		pickle.dump(entry_hash, f)
-		f.close()
+	if migrationCount == 1:
+		"One entry migrated or updated on destination."
+	else:
+		print "%d entries migrated or updated on destination." % (migrationCount, )
 	
-		try:
-			f = gSourceAccount.readMetaDataFile('comment.meta', 0)
-			metacache = pickle.load(f)
-			f.close()
-		except:
-			metacache = {}
+	f = gSourceAccount.openMetadataFile('entry_correspondences.hash', 0)
+	pickle.dump(entry_hash, f)
+	f.close()
+
+	try:
+		f = gSourceAccount.readMetaDataFile('comment.meta', 0)
+		metacache = pickle.load(f)
+		f.close()
+	except:
+		metacache = {}
+	
+	try:
+		f = gSourceAccount.readMetaDataFile('user.map', 0)
+		usermap = pickle.load(f)
+		f.close()
+	except:
+		usermap = {}
 		
-		try:
-			f = gSourceAccount.readMetaDataFile('user.map', 0)
-			usermap = pickle.load(f)
-			f.close()
-		except:
-			usermap = {}
+	print "Fetching journal comments for: %s" % gSourceAccount.journal
+	
+	maxid = lastmaxid
+	while 1:
+		r = urllib2.urlopen(urllib2.Request(gSourceAccount.host+"/export_comments.bml?get=comment_meta&startid=%d" % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
+		meta = xml.dom.minidom.parse(r)
+		r.close()
+		for c in meta.getElementsByTagName("comment"):
+			id = int(c.getAttribute("id"))
+			metacache[id] = {
+				'posterid': c.getAttribute("posterid"),
+				'state': c.getAttribute("state"),
+			}
+			if id > maxid:
+				maxid = id
+		for u in meta.getElementsByTagName("usermap"):
+			usermap[u.getAttribute("id")] = u.getAttribute("user")
+		if maxid >= int(meta.getElementsByTagName("maxid")[0].firstChild.nodeValue):
+			break
 		
-		print "Fetching journal comments for: %s" % gSourceAccount.journal
-		
-		maxid = lastmaxid
+	# checkpoint
+	f = gSourceAccount.openMetadataFile('last_sync', 0)
+	f.write("%s\n" % lastsync)
+	f.write("%s\n" % lastmaxid)
+	f.close()
+
+	f = gSourceAccount.openMetadataFile('comment.meta', 0)
+	pickle.dump(metacache, f)
+	f.close()
+	
+	f = gSourceAccount.openMetadataFile('user.map', 0)
+	pickle.dump(usermap, f)
+	f.close()
+	
+	newmaxid = maxid
+	maxid = lastmaxid
+	
+	if gSourceAccount.user == gSourceAccount.journal:
+		# hackity. haven't yet figured out how to get community comments
 		while 1:
-			r = urllib2.urlopen(urllib2.Request(gSourceAccount.host+"/export_comments.bml?get=comment_meta&startid=%d" % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
+			r = urllib2.urlopen(urllib2.Request(gSourceAccount.host+"/export_comments.bml?get=comment_body&startid=%d" % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
 			meta = xml.dom.minidom.parse(r)
 			r.close()
 			for c in meta.getElementsByTagName("comment"):
 				id = int(c.getAttribute("id"))
-				metacache[id] = {
-					'posterid': c.getAttribute("posterid"),
-					'state': c.getAttribute("state"),
+				jitemid = c.getAttribute("jitemid")
+				comment = {
+					'id': str(id),
+					'parentid': c.getAttribute("parentid"),
+					'subject': gettext(c.getElementsByTagName("subject")),
+					'date': gettext(c.getElementsByTagName("date")),
+					'body': gettext(c.getElementsByTagName("body")),
+					'state': metacache[id]['state'],
 				}
+				if usermap.has_key(c.getAttribute("posterid")):
+					comment["user"] = usermap[c.getAttribute("posterid")]
+				try:
+					entry = xml.dom.minidom.parse("%s/C-%s" % (gSourceAccount.journal, jitemid))
+				except:
+					entry = xml.dom.minidom.getDOMImplementation().createDocument(None, "comments", None)
+				found = 0
+				for d in entry.getElementsByTagName("comment"):
+					if int(d.getElementsByTagName("id")[0].firstChild.nodeValue) == id:
+						found = 1
+						break
+				if found:
+					print "Warning: downloaded duplicate comment id %d in jitemid %s" % (id, jitemid)
+				else:
+					if allEntries.has_key(jitemid):
+						cmt = Comment(comment)
+						allEntries[jitemid].addComment(cmt)
+					entry.documentElement.appendChild(createxml(entry, "comment", comment))				
+					path = os.path.join(gSourceAccount.journal, makeItemName(jitemid, 'entry'))
+					if not os.path.exists(path):
+						os.makedirs(path)
+					f = codecs.open(os.path.join(path, "comments.xml"), "w", "UTF-8")
+					entry.writexml(f)
+					f.close()
+					newcomments += 1
 				if id > maxid:
 					maxid = id
-			for u in meta.getElementsByTagName("usermap"):
-				usermap[u.getAttribute("id")] = u.getAttribute("user")
-			if maxid >= int(meta.getElementsByTagName("maxid")[0].firstChild.nodeValue):
+			if maxid >= newmaxid:
 				break
-		
-		# checkpoint
-		f = gSourceAccount.openMetadataFile('last_sync', 0)
-		f.write("%s\n" % lastsync)
-		f.write("%s\n" % lastmaxid)
-		f.close()
 	
-		f = gSourceAccount.openMetadataFile('comment.meta', 0)
-		pickle.dump(metacache, f)
-		f.close()
-		
-		f = gSourceAccount.openMetadataFile('user.map', 0)
-		pickle.dump(usermap, f)
-		f.close()
-		
-		newmaxid = maxid
-		maxid = lastmaxid
-		
-		if gSourceAccount.user == gSourceAccount.journal:
-			# hackity. haven't yet figured out how to get community comments
-			while 1:
-				r = urllib2.urlopen(urllib2.Request(gSourceAccount.host+"/export_comments.bml?get=comment_body&startid=%d" % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
-				meta = xml.dom.minidom.parse(r)
-				r.close()
-				for c in meta.getElementsByTagName("comment"):
-					id = int(c.getAttribute("id"))
-					jitemid = c.getAttribute("jitemid")
-					comment = {
-						'id': str(id),
-						'parentid': c.getAttribute("parentid"),
-						'subject': gettext(c.getElementsByTagName("subject")),
-						'date': gettext(c.getElementsByTagName("date")),
-						'body': gettext(c.getElementsByTagName("body")),
-						'state': metacache[id]['state'],
-					}
-					if usermap.has_key(c.getAttribute("posterid")):
-						comment["user"] = usermap[c.getAttribute("posterid")]
-					try:
-						entry = xml.dom.minidom.parse("%s/C-%s" % (gSourceAccount.journal, jitemid))
-					except:
-						entry = xml.dom.minidom.getDOMImplementation().createDocument(None, "comments", None)
-					found = 0
-					for d in entry.getElementsByTagName("comment"):
-						if int(d.getElementsByTagName("id")[0].firstChild.nodeValue) == id:
-							found = 1
-							break
-					if found:
-						print "Warning: downloaded duplicate comment id %d in jitemid %s" % (id, jitemid)
-					else:
-						if allEntries.has_key(jitemid):
-							cmt = Comment(comment)
-							allEntries[jitemid].addComment(cmt)
-						entry.documentElement.appendChild(createxml(entry, "comment", comment))				
-						path = os.path.join(gSourceAccount.journal, makeItemName(jitemid, 'entry'))
-						if not os.path.exists(path):
-							os.makedirs(path)
-						f = codecs.open(os.path.join(path, "comments.xml"), "w", "UTF-8")
-						entry.writexml(f)
-						f.close()
-						newcomments += 1
-					if id > maxid:
-						maxid = id
-				if maxid >= newmaxid:
-					break
-		
-		lastmaxid = maxid
-		
-		f = gSourceAccount.openMetadataFile('last_sync', 0)
-		f.write("%s\n" % lastsync)
-		f.write("%s\n" % lastmaxid)
-		f.close()
-			
-		if gGenerateHtml:
-			print "Now generating a simple html version of your posts + comments."
-			htmlpath = os.path.join(gSourceAccount.journal, 'html')
-			if not os.path.exists(htmlpath):
-				firstTime = 1
-				os.makedirs(htmlpath)
-			else:
-				firstTime = 0
-			
-			ids = allEntries.keys()
-			ids.sort()
-			
-			for id in ids:
-				try:
-					allEntries[id].emit(htmlpath);
-				except StandardError, e:
-					print "skipping post", id, "because of error:", str(e)
-					traceback.print_exc(5)
-				
-			emitIndex(htmlpath, firstTime)
-		
-		print "Local archive complete!"
+	lastmaxid = maxid
 	
-		if origlastsync:
-			print "%d new entries, %d new comments (since %s),  %d new comments by user" % (newentries, newcomments, origlastsync, commentsBy)
+	f = gSourceAccount.openMetadataFile('last_sync', 0)
+	f.write("%s\n" % lastsync)
+	f.write("%s\n" % lastmaxid)
+	f.close()
+		
+	if gGenerateHtml:
+		print "Now generating a simple html version of your posts + comments."
+		htmlpath = os.path.join(gSourceAccount.journal, 'html')
+		if not os.path.exists(htmlpath):
+			firstTime = 1
+			os.makedirs(htmlpath)
 		else:
-			print "%d entries, %d comments, %d comments by user" % (newentries, newcomments, commentsBy)
-		if errors > 0:
-			print "%d errors" % errors
+			firstTime = 0
+		
+		ids = allEntries.keys()
+		ids.sort()
+		
+		for id in ids:
+			try:
+				allEntries[id].emit(htmlpath);
+			except StandardError, e:
+				print "skipping post", id, "because of error:", str(e)
+				traceback.print_exc(5)
+			
+		emitIndex(htmlpath, firstTime)
+	
+	print "Local archive complete!"
+
+	if origlastsync:
+		print "%d new entries, %d new comments (since %s),  %d new comments by user" % (newentries, newcomments, origlastsync, commentsBy)
+	else:
+		print "%d entries, %d comments, %d comments by user" % (newentries, newcomments, commentsBy)
+	if errors > 0:
+		print "%d errors" % errors
 
 
 
