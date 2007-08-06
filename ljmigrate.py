@@ -30,7 +30,7 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.3 070805e Sun Aug  5 21:43:21 PDT 2007'
+__version__ = '1.3 070805e Sun Aug  5 21:52:08 PDT 2007'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
@@ -517,7 +517,7 @@ class Entry(object):
 		self.buildCommentTree()
 		for c in self.comments:
 			result = result + "<hr />\n"
-			result = result + c.emit().encode('utf-8', 'replace')
+			result = result + c.emit().decode('utf-8', 'replace')
 	
 		result = result + tmpl_end
 		
@@ -712,9 +712,9 @@ def synchronizeJournals(migrate = 0):
 						except xmlrpclib.Fault, e:
 							code = int(e.faultCode)
 							if code == 101:
-								print "Password on destination is incorrect. Check your config and try again."
-								sys.exit();
-							if code == 205:
+								print "Password on destination is incorrect? Retrying anyway..."
+								keepTrying -= 1
+							elif code == 205:
 								# Client error: Unknown metadata: taglist
 								matches = re.match(r'Client error: Unknown metadata: (\w+)', e.faultString)
 								if matches:
