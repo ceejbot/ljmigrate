@@ -6,6 +6,7 @@ TODO
 - 200 lines of main()? Ugh. Clean up.
 - Command line options for everything + usage info.
 - After-the-fact html generation for existing archives.
+- Use local archive to migrate to a new destination.
 - Migrate friend groups & custom filters.
 
 IN PROGRESS

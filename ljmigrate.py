@@ -444,12 +444,7 @@ class Entry(object):
 		else:
 			self.journalname = username
 		for k in dict.keys():
-			if type(dict[k]) in [types.StringType, types.UnicodeType]:
-				self.__dict__[k] = dict[k].decode('utf-8', 'replace')
-			elif type(dict[k]) == types.InstanceType:
-				self.__dict__[k] = dict[k].data.decode('utf-8', 'replace')
-			else:
-				self.__dict__[k] = dict[k]
+			self.__dict__[k] = convertBinary(dict[k])
 		self.comments = []
 		self.commentids = {}
 		
@@ -521,7 +516,7 @@ class Entry(object):
 		# emit comments
 		self.buildCommentTree()
 		for c in self.comments:
-			result = result + c.emit()
+			result = result + c.emit().encode('utf-8', 'replace')
 	
 		result = result + tmpl_end
 		
@@ -556,12 +551,7 @@ class Comment(object):
 		self.body = ''
 		self.date = ''
 		for k in dict.keys():
-			if type(dict[k]) in [types.StringType, types.UnicodeType]:
-				self.__dict__[k] = dict[k].decode('utf-8', 'replace')
-			elif type(dict[k]) == types.InstanceType:
-				self.__dict__[k] = dict[k].data.decode('utf-8', 'replace')
-			else:
-				self.__dict__[k] = dict[k]
+			self.__dict__[k] = convertBinary(dict[k])
 	
 	def addChild(self, child):
 		self.children.append(child)
@@ -579,6 +569,13 @@ class Comment(object):
 			result.append(child.emit(indent + 1))
 		
 		return '\n'.join(result)
+
+def convertBinary(item):
+	if type(item) in [types.StringType, types.UnicodeType]:
+		return item.encode('utf-8', 'replace')
+	elif type(item) == types.InstanceType:
+		return item.data.decode('utf-8', 'replace')
+	return item
 		
 def fetchItem(item):
 	global errors, allEntries, newentries
@@ -588,6 +585,7 @@ def fetchItem(item):
 		try:
 			entry = gSourceAccount.getOneEvent(item['item'][2:])
 			writedump(gSourceAccount.journal, item['item'], 'entry', entry)
+			entry['event'] = convertBinary(entry['event'])
 
 			if gGenerateHtml:
 				eobj = Entry(entry, gSourceAccount.user, gSourceAccount.journal)
@@ -658,8 +656,15 @@ def synchronizeJournals(migrate = 0):
 		f = gSourceAccount.readMetaDataFile('entry_correspondences.hash', 0)
 		entry_hash = pickle.load(f)
 		f.close()
+		if type(entry_hash.keys()[0]) == types.IntType:
+			foo = {}
+			foo[gSourceAccount.user] = entry_hash
+			entry_hash = foo
 	except:
 		entry_hash = {}
+		
+	if not entry_hash.has_key(gSourceAccount.journal):
+		entry_hash[gSourceAccount.journal] = {}
 		
 	while 1:
 		syncitems = gSourceAccount.getSyncItems(lastsync)
@@ -687,14 +692,14 @@ def synchronizeJournals(migrate = 0):
 					keepTrying = 5
 					while keepTrying:
 						try:
-							if not entry_hash.has_key(item['item'][2:]):
+							if not entry_hash[gSourceAccount.journal].has_key(item['item'][2:]):
 								print "    migrating entry to", gDestinationAccount.journal
 								result = gDestinationAccount.postEntry(entry)
-								entry_hash[item['item'][2:]] = result.get('itemid', -1)
+								antennapedia[item['item'][2:]] = result.get('itemid', -1)
 								migrationCount += 1
 							elif item['action'] == 'update':
 								print "   updating migrated entry in", gDestinationAccount.journal
-								result = gDestinationAccount.editEntry(entry, entry_hash[item['item'][2:]])
+								result = gDestinationAccount.editEntry(entry, antennapedia[item['item'][2:]])
 								migrationCount += 1
 							keepTrying = 0
 						except socket.gaierror, e:
@@ -896,13 +901,18 @@ def main(retryMigrate = 0, communitiesOnly = 0, skipUserPics = 0):
 	if not communitiesOnly:
 		synchronizeJournals(gMigrate)
 	
-	accounts = map(None, gSourceAccount.journal_list, gDestinationAccount.journal_list)
-	for pair in accounts:
-		gSourceAccount.journal = pair[0]
-		if pair[1]:
-			gDestinationAccount.journal = pair[1]
-			synchronizeJournals(1)
-		else:
+	if gDestinationAccount:
+		accounts = map(None, gSourceAccount.journal_list, gDestinationAccount.journal_list)
+		for pair in accounts:
+			gSourceAccount.journal = pair[0]
+			if pair[1]:
+				gDestinationAccount.journal = pair[1]
+				synchronizeJournals(1)
+			else:
+				synchronizeJournals(0)
+	else:
+		for comm in gSourceAccount.journal_list:
+			gSourceAccount.journal = comm
 			synchronizeJournals(0)
 	
 	
