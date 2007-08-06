@@ -30,12 +30,11 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.3 070805e Sun Aug  5 21:52:08 PDT 2007'
+__version__ = '1.3 070805f Sun Aug  5 22:19:39 PDT 2007'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
 configpath = "ljmigrate.cfg"
-
 
 # hackity hack
 global gSourceAccount, gDestinationAccount, gMigrate, gGenerateHtml
@@ -696,11 +695,11 @@ def synchronizeJournals(migrate = 0):
 							if not entry_hash[gSourceAccount.journal].has_key(item['item'][2:]):
 								print "    migrating entry to", gDestinationAccount.journal
 								result = gDestinationAccount.postEntry(entry)
-								antennapedia[item['item'][2:]] = result.get('itemid', -1)
+								entry_hash[item['item'][2:]] = result.get('itemid', -1)
 								migrationCount += 1
 							elif item['action'] == 'update':
 								print "   updating migrated entry in", gDestinationAccount.journal
-								result = gDestinationAccount.editEntry(entry, antennapedia[item['item'][2:]])
+								result = gDestinationAccount.editEntry(entry, entry_hash[item['item'][2:]])
 								migrationCount += 1
 							keepTrying = 0
 						except socket.gaierror, e:
