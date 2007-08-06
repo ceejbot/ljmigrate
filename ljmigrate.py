@@ -30,7 +30,7 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.3 070805c'
+__version__ = '1.3 070805e'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
@@ -661,8 +661,6 @@ def synchronizeJournals(migrate = 0):
 	except:
 		entry_hash = {}
 		
-	considerMigrating = (migrate and gDestinationAccount)
-
 	while 1:
 		syncitems = gSourceAccount.getSyncItems(lastsync)
 		if len(syncitems) == 0:
@@ -672,7 +670,20 @@ def synchronizeJournals(migrate = 0):
 				print "Fetching journal entry %s (%s)" % (item['item'], item['action'])
 				entry = fetchItem(item)
 				
-				if considerMigrating and entry and (not entry.has_key('poster') or entry['poster'] == gSourceAccount.user or not gMigrateOwnOnly):
+				# pulling this out into stages to make the logic clearer
+				# only migrate if we have the option set, if we have a destination account, AND we have an entry to move
+				migrate = (migrate and gDestinationAccount and entry)
+				# if the entry has no poster key, it's a personal journal. always migrate
+				# if the option to migrate only our own posts is set, we need to consider the poster...
+				if entry.has_key('poster'):
+					if gMigrateOwnOnly:
+						# and set the flag only if we're the original poster
+						migrate = migrate and (entry['poster'] == gSourceAccount.user)
+					else:
+						# we prepend the post with a slug indicating who posted originally
+						entry['event'] = (u'<p><b>Original poster: <i>%s</i></b><p>' % entry['poster']) + entry['event']
+				
+				if migrate:
 					keepTrying = 5
 					while keepTrying:
 						try:
@@ -872,7 +883,7 @@ def synchronizeJournals(migrate = 0):
 
 
 
-def main(retryMigrate = 0):
+def main(retryMigrate = 0, communitiesOnly = 0, skipUserPics = 0):
 	fetchConfig()
 
 	if not os.path.exists(gSourceAccount.user):
@@ -880,9 +891,10 @@ def main(retryMigrate = 0):
 		print "Created subdirectory: %s" % gSourceAccount.user
 	
 	gSourceAccount.makeSession()
-	gSourceAccount.fetchUserPics()
-	# first run does the basics
-	synchronizeJournals(gMigrate)
+	if not skipUserPics:
+		gSourceAccount.fetchUserPics()
+	if not communitiesOnly:
+		synchronizeJournals(gMigrate)
 	
 	accounts = map(None, gSourceAccount.journal_list, gDestinationAccount.journal_list)
 	for pair in accounts:
@@ -952,6 +964,8 @@ no options: archive & migrate posts from one LJ account to another
 -n, --nuke : delete ALL posts in the specified account; see README for details
 -r, --retry : run through all posts on source, re-trying to migrate posts that
               weren't migrated the first time
+-r, --communities-only : migrate/archive *only* communities
+-u, --user-pics-skip : don't back up user pics this run
 -v, --version : print version
 -h, --help : print this usage info"""
 	version()
@@ -965,7 +979,7 @@ def version():
 
 if __name__ == '__main__':
 	try:
-		optlist, pargs = getopt.getopt(sys.argv[1:], 'nrhv', ['nuke', 'retry', 'help', 'version', ])
+		optlist, pargs = getopt.getopt(sys.argv[1:], 'nrhvcu', ['nuke', 'retry', 'help', 'version', 'communities-only', 'user-pics-skip'])
 	except getopt.GetoptError, e:
 		print e
 		usage()
@@ -984,8 +998,16 @@ if __name__ == '__main__':
 	if options.has_key('--retry') or options.has_key('-r'):
 		retryMigrate = 1
 
+	skipUserPics = 0
+	if options.has_key('--user-pics-skip') or options.has_key('-u'):
+		skipUserPics = 1
+
+	commsOnly = 0
+	if options.has_key('--communities-only') or options.has_key('-c'):
+		commsOnly = 1
+
 	if options.has_key('--nuke') or options.has_key('-n'):
 		nukeall()
 	else:
-		main(retryMigrate)
+		main(retryMigrate, commsOnly, skipUserPics)
 
