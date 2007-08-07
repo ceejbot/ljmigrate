@@ -30,7 +30,7 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.3 070805g'
+__version__ = '1.3 070805g Tue Aug  7 07:58:13 PDT 2007'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
@@ -443,7 +443,12 @@ class Entry(object):
 		else:
 			self.journalname = username
 		for k in dict.keys():
-			self.__dict__[k] = convertBinary(dict[k])
+			if type(dict[k]) == types.DictType:
+				self.__dict__[k] = {}
+				for j in dict[k].keys():
+					self.__dict__[k][j] = convertBinary(dict[k][j])
+			else:
+				self.__dict__[k] = convertBinary(dict[k])
 		self.comments = []
 		self.commentids = {}
 		
@@ -686,7 +691,7 @@ def synchronizeJournals(migrate = 0):
 						migrate = migrate and (entry['poster'] == gSourceAccount.user)
 					else:
 						# we prepend the post with a slug indicating who posted originally
-						entry['event'] = (u'<p><b>Original poster: <i>%s</i></b><p>' % entry['poster']) + entry['event']
+						entry['event'] = (u'<p><b>Original poster: <i><a href="http://%s.livejournal.com/">%s</a></i></b><p>' % (entry['poster'], entry['poster'])) + entry['event']
 				
 				if migrate:
 					keepTrying = 5
