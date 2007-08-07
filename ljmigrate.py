@@ -716,6 +716,7 @@ def synchronizeJournals(migrate = 0):
 						except xmlrpclib.Fault, e:
 							code = int(e.faultCode)
 							if code == 101:
+								print "Fault reported is:",e.faultString
 								print "Password on destination is incorrect? Retrying anyway..."
 								keepTrying -= 1
 							elif code == 205:
@@ -725,8 +726,11 @@ def synchronizeJournals(migrate = 0):
 									badprop = matches.group(1)
 									del entry['props'][badprop]
 									keepTrying -= 1
+								else:
+									print "Fault:",e.faultString
+									keepTrying = 0
 							elif code == 302:
-								print e.faultString
+								print "Fault:",e.faultString
 								print "Something's out of sync."
 								keepTrying = 0
 							else:
