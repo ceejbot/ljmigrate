@@ -3,15 +3,16 @@ TODO
 - Interview-style configuration if config file not found or bad.
 - Bad bug with generating the html index file on subsequent runs-- it will
   nuke the existing content. 
-- 200 lines of main()? Ugh. Clean up.
-- Command line options for everything + usage info.
 - After-the-fact html generation for existing archives.
 - Use local archive to migrate to a new destination.
 - Migrate friend groups & custom filters.
+- Stop assuming LJ is source server in regexps etc.
 
 IN PROGRESS
 
 - Archives for communities.
+- 200 lines of main()? Ugh. Clean up.
+- Command line options for everything + usage info.
 
 COMPLETED
 

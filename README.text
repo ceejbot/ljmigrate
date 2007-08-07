@@ -29,6 +29,7 @@ the *old* version of the tool into the new one. Run the new version. Tada!
 
 ## To use: expert version
 
+Make sure your journal has been converted to Unicode, if it's an older one.
 Edit the sample config options in ljmigrate.cfg.
 Edit to point the tool to your LJ account and the account you're migrating to.
 If you're not migrating, set the "migrate" config value to 0 or False.
@@ -45,6 +46,12 @@ migration:
 This will skip entries it successfully moved before.
 
 ## To use: long version
+
+* If your journal is an older one, you might need to convert it to Unicode.
+  Visit this url and follow the instructions. If you 
+
+	http://www.livejournal.com/settings/?c=OldEncoding
+	http://www.livejournal.com/support/faqbrowse.bml?faqid=143&q=unicode&lang=
 
 * Edit the config file: ljmigrate.cfg
   Make sure you use that EXACT name! Many editors will try to force on
@@ -194,7 +201,7 @@ GOING BACK ON THIS. ONLY RUN IT IF YOU REALLY WANT ALL YOUR POSTS DELETED.
 
 Valuable bug-reporting provided by:
 ldybastet, kannnichtfranz, eleraama, daiseechain, nm973, zortified,
-weirdquark, winterthunder
+weirdquark, winterthunder, unmisha
 
 
 ## Changes from ljdump 1.2
