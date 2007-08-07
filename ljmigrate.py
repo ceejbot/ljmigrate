@@ -481,7 +481,7 @@ class Entry(object):
 
 		if properties.has_key('picture_keyword'):
 			kw = properties['picture_keyword']
-			if type(kw) not in [types.StringType, types.UnicodeType]:
+			if type(kw) == types.InstanceType:
 				kw = kw.data.decode('utf-8', 'replace')
 		else:
 			kw = 'default'
