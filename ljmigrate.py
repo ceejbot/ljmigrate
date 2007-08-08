@@ -30,7 +30,7 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.3 070805g Tue Aug  7 07:58:13 PDT 2007'
+__version__ = '1.3 070805h Wed Aug  8 07:01:36 PDT 2007'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
@@ -588,6 +588,12 @@ def convertBinary(item):
 	elif type(item) == types.InstanceType:
 		return item.data.decode('utf-8', 'replace')
 	return item
+
+def recordLastSync(lastsync, lastmaxid):
+	f = gSourceAccount.openMetadataFile('last_sync', 0)
+	f.write("%s\n" % lastsync)
+	f.write("%s\n" % lastmaxid)
+	f.close()
 		
 def fetchItem(item):
 	global errors, allEntries, newentries
@@ -757,6 +763,7 @@ def synchronizeJournals(migrate = 0):
 			else:
 				pprint.pprint(item)
 			lastsync = item['time']
+			recordLastSync(lastsync, lastmaxid)
 
 	if migrationCount == 1:
 		"One entry migrated or updated on destination."
@@ -800,12 +807,8 @@ def synchronizeJournals(migrate = 0):
 			usermap[u.getAttribute("id")] = u.getAttribute("user")
 		if maxid >= int(meta.getElementsByTagName("maxid")[0].firstChild.nodeValue):
 			break
-		
-	# checkpoint
-	f = gSourceAccount.openMetadataFile('last_sync', 0)
-	f.write("%s\n" % lastsync)
-	f.write("%s\n" % lastmaxid)
-	f.close()
+	
+	recordLastSync(lastsync, lastmaxid)
 
 	f = gSourceAccount.openMetadataFile('comment.meta', 0)
 	pickle.dump(metacache, f)
