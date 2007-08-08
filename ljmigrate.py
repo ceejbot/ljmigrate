@@ -30,7 +30,7 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.3 070805h Wed Aug  8 07:01:36 PDT 2007'
+__version__ = '1.3 070805h Wed Aug  8 07:20:09 PDT 2007'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
@@ -594,6 +594,11 @@ def recordLastSync(lastsync, lastmaxid):
 	f.write("%s\n" % lastsync)
 	f.write("%s\n" % lastmaxid)
 	f.close()
+
+def recordEntryHash(entry_hash):
+	f = gSourceAccount.openMetadataFile('entry_correspondences.hash', 0)
+	pickle.dump(entry_hash, f)
+	f.close()
 		
 def fetchItem(item):
 	global errors, allEntries, newentries
@@ -674,7 +679,9 @@ def synchronizeJournals(migrate = 0):
 		f = gSourceAccount.readMetaDataFile('entry_correspondences.hash', 0)
 		entry_hash = pickle.load(f)
 		f.close()
-		if type(entry_hash.keys()[0]) == types.IntType:
+		test = entry_hash.keys()
+		test.sort()
+		if type(test[0]) == types.IntType:
 			foo = {}
 			foo[gSourceAccount.user] = entry_hash
 			entry_hash = foo
@@ -713,11 +720,12 @@ def synchronizeJournals(migrate = 0):
 							if not entry_hash[gSourceAccount.journal].has_key(item['item'][2:]):
 								print "    migrating entry to", gDestinationAccount.journal
 								result = gDestinationAccount.postEntry(entry)
-								entry_hash[item['item'][2:]] = result.get('itemid', -1)
+								entry_hash[gSourceAccount.journal][item['item'][2:]] = result.get('itemid', -1)
+								recordEntryHash(entry_hash)
 								migrationCount += 1
 							elif item['action'] == 'update':
 								print "   updating migrated entry in", gDestinationAccount.journal
-								result = gDestinationAccount.editEntry(entry, entry_hash[item['item'][2:]])
+								result = gDestinationAccount.editEntry(entry, entry_hash[gSourceAccount.journal][item['item'][2:]])
 								migrationCount += 1
 							keepTrying = 0
 						except socket.gaierror, e:
@@ -770,9 +778,7 @@ def synchronizeJournals(migrate = 0):
 	else:
 		print "%d entries migrated or updated on destination." % (migrationCount, )
 	
-	f = gSourceAccount.openMetadataFile('entry_correspondences.hash', 0)
-	pickle.dump(entry_hash, f)
-	f.close()
+	recordEntryHash(entry_hash)
 
 	try:
 		f = gSourceAccount.readMetaDataFile('comment.meta', 0)
@@ -870,10 +876,7 @@ def synchronizeJournals(migrate = 0):
 	
 	lastmaxid = maxid
 	
-	f = gSourceAccount.openMetadataFile('last_sync', 0)
-	f.write("%s\n" % lastsync)
-	f.write("%s\n" % lastmaxid)
-	f.close()
+	recordLastSync(lastsync, lastmaxid)
 		
 	if gGenerateHtml:
 		print "Now generating a simple html version of your posts + comments."
