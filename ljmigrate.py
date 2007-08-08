@@ -61,6 +61,13 @@ class Account(object):
 		else:
 			self.host = host
 		
+		m = re.search("http://(.*)", host)
+		if m:
+			self.site = m.group(1)
+		else:
+			self.site = host
+			self.host = "http://" + host
+		
 		self.user = user
 		self.password = password
 		self.flat_api = self.host + "/interface/flat"
@@ -477,8 +484,8 @@ class Entry(object):
 
 		if hasattr(self, 'subject'):
 			subject = self.subject
-			subject = userpattern.sub(r'<b><a href="http://\1.livejournal.com/"><img src="http://stat.livejournal.com/img/userinfo.gif" alt="[info]" width="17" height="17" style="vertical-align: bottom; border: 0;" />\1</a></b>', subject)
-			subject = commpattern.sub(r'<b><a href="http://community.livejournal.com/\1/"><img src="http://stat.livejournal.com/img/community.gif" alt="[info]" width="16" height="16" style="vertical-align: bottom; border: 0;" />\1</a></b>', subject)
+			subject = userpattern.sub(r'<b><a href="http://\1.%s/"><img src="http://stat.livejournal.com/img/userinfo.gif" alt="[info]" width="17" height="17" style="vertical-align: bottom; border: 0;" />\1</a></b>' % gSourceAccount.site, subject)
+			subject = commpattern.sub(r'<b><a href="http://community.%s/\1/"><img src="http://stat.livejournal.com/img/community.gif" alt="[info]" width="16" height="16" style="vertical-align: bottom; border: 0;" />\1</a></b>' % gSourceAccount.site, subject)
 		else:
 			subject = "(No Subject)"
 		
@@ -512,8 +519,8 @@ class Entry(object):
 			content = self.event.decode('utf-8', 'replace')
 			if not self.props.has_key('opt_preformatted'):
 				content = content.replace("\n", "<br />\n");
-			content = userpattern.sub(r'<b><a href="http://\1.livejournal.com/"><img src="http://stat.livejournal.com/img/userinfo.gif" alt="[info]" width="17" height="17" style="vertical-align: bottom; border: 0;" />\1</a></b>', content)
-			content = commpattern.sub(r'<b><a href="http://community.livejournal.com/\1/"><img src="http://stat.livejournal.com/img/community.gif" alt="[info]" width="16" height="16" style="vertical-align: bottom; border: 0;" />\1</a></b>', content)
+			content = userpattern.sub(r'<b><a href="http://\1.%s/"><img src="http://stat.livejournal.com/img/userinfo.gif" alt="[info]" width="17" height="17" style="vertical-align: bottom; border: 0;" />\1</a></b>' % gSourceAccount.site, content)
+			content = commpattern.sub(r'<b><a href="http://community.%s/\1/"><img src="http://stat.livejournal.com/img/community.gif" alt="[info]" width="16" height="16" style="vertical-align: bottom; border: 0;" />\1</a></b>', content)
 	
 			result = result + '\n<br /><div id="Content">%s</div>\n' % (content, )
 			
@@ -691,7 +698,7 @@ def synchronizeJournals(migrate = 0):
 						migrate = migrate and (entry['poster'] == gSourceAccount.user)
 					else:
 						# we prepend the post with a slug indicating who posted originally
-						entry['event'] = (u'<p><b>Original poster: <i><a href="http://%s.livejournal.com/">%s</a></i></b><p>' % (entry['poster'], entry['poster'])) + entry['event']
+						entry['event'] = (u'<p><b>Original poster: <i><a href="http://%s.%s/">%s</a></i></b><p>' % (entry['poster'],  gSourceAccount.site, entry['poster'])) + entry['event']
 				
 				if migrate:
 					keepTrying = 5

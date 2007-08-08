@@ -7,6 +7,7 @@ TODO
 - Use local archive to migrate to a new destination.
 - Migrate friend groups & custom filters.
 - Stop assuming LJ is source server in regexps etc.
+- Notice if we already have a user pic and skip it.
 
 IN PROGRESS
 

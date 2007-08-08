@@ -180,8 +180,8 @@ Feature not very well tested yet.
 
 ## Secret nuclear option
 
-While testing I found it very useful to have a tool that nukes all
-the entries in my test journal. I figured you could use it too.
+While testing I found it very useful to have a tool that nukes all the
+entries in my test journal. I figured you could use it too.
 
 Add a section to the config file that looks like this:
 
