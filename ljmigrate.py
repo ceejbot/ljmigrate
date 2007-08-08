@@ -692,7 +692,7 @@ def synchronizeJournals(migrate = 0):
 				migrate = (migrate and gDestinationAccount and entry)
 				# if the entry has no poster key, it's a personal journal. always migrate
 				# if the option to migrate only our own posts is set, we need to consider the poster...
-				if entry.has_key('poster'):
+				if entry and entry.has_key('poster'):
 					if gMigrateOwnOnly:
 						# and set the flag only if we're the original poster
 						migrate = migrate and (entry['poster'] == gSourceAccount.user)
