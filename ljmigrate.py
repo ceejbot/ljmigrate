@@ -732,7 +732,10 @@ def synchronizeJournals(migrate = 0):
 							# TODO cleanup
 							sys.exit()
 						except xmlrpclib.Fault, e:
-							code = int(e.faultCode)
+							try:
+								code = int(e.faultCode)
+							except:
+								code = e.faultCode
 							if code == 101:
 								log("Fault reported is: %s; retrying" % e.faultString)
 								keepTrying -= 1
@@ -750,8 +753,7 @@ def synchronizeJournals(migrate = 0):
 								log("Fault: %s; something is badly out of sync." % e.faultString)
 								keepTrying = 0
 							else:
-								traceback.print_exc(5)
-								# faultString
+								exception("Fault: "+e.faultString, e)
 								keepTrying = 0
 						except exceptions.Exception, x:
 							exception("reposting item: %s" % item['item'], x)
@@ -910,15 +912,16 @@ def log(message):
 	except:
 		pass
 
-def exception(message, exception):
+def exception(message, exc):
 	try:
-		print "ERROR:", message, str(exception)
+		print "ERROR:", message, str(exc)
 		traceback.print_exc(5)
 	except:
 		print "error printing error message, of all things"
 	try:
 		gSourceAccount.runlog.write(message+"\n")
-		gSourceAccount.runlog.write(exception+"\n")
+		text = traceback.format_exc(5)
+		gSourceAccount.runlog.write(text+"\n")
 	except:
 		pass
 
