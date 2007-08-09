@@ -30,7 +30,7 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.3 070805h Wed Aug  8 07:20:09 PDT 2007'
+__version__ = '1.3 070805j Wed Aug  8 21:21:33 PDT 2007'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
@@ -257,7 +257,7 @@ class Account(object):
 		return result
 		
 	def fetchUserPics(self):
-		print "Fetching userpics for: %s" % self.user
+		log("Fetching userpics for: %s" % self.user)
 	
 		r = self.getUserPics()
 		userpics = {}
@@ -274,7 +274,7 @@ class Account(object):
 		print >>f, "<userpics>"
 		for p in userpics:
 			kwd = p.decode('utf-8', 'replace')
-			print u'    Getting pic for keywords "%s"' % kwd.encode('ascii', 'replace')
+			log(u'    Getting pic for keywords "%s"' % kwd.encode('ascii', 'replace'))
 			f.write(u'<userpic keyword="%s" url="%s" />\n' % (kwd, userpics[p]))
 			try:
 				r = urllib2.urlopen(userpics[p])
@@ -474,7 +474,7 @@ class Entry(object):
 
 	def emit(self, path):
 		if not hasattr(self, 'itemid'):
-			print "No item ID found in entry. Skipping:", entry
+			log("No item ID found in entry. Skipping: %s" % entry)
 			return
 		
 		if hasattr(self, 'props'):
@@ -617,30 +617,27 @@ def fetchItem(item):
 			keepTrying = 0
 
 		except socket.gaierror, e:
-			print "Socket error. Double-check your account information, and your net connection."
+			exception("Socket error. Double-check your account information, and your net connection.", e)
 			keepTrying = 0
 		except xmlrpclib.ProtocolError, e:
-			print "Error; retrying:", str(e)
+			exception("recoverable; retrying:", e)
 			keepTrying = keepTrying - 1
 		except exceptions.KeyboardInterrupt, e:
 			keepTrying = 0
 			# TODO cleanup
 			sys.exit()
 		except exceptions.Exception, x:
-			print "Error getting item: %s" % item['item']
-			traceback.print_exc(5)
-			#pprint.pprint(x)
+			exception("fetching item %s; retrying" % item['item'], x)
 			errors += 1
 			keepTrying = 0
 	return entry
 
 		
 def synchronizeJournals(migrate = 0):
-
-	print "Fetching journal entries for: %s" % gSourceAccount.journal
+	log("Fetching journal entries for: %s" % gSourceAccount.journal)
 	if not os.path.exists(gSourceAccount.journal):
 		os.makedirs(gSourceAccount.journal)
-		print "Created subdirectory: %s" % gSourceAccount.journal
+		log("Created subdirectory: %s" % gSourceAccount.journal)
 
 	global allEntries, errors, newentries  # HACK
 
@@ -697,7 +694,7 @@ def synchronizeJournals(migrate = 0):
 			break
 		for item in syncitems:
 			if item['item'][0] == 'L':
-				print "Fetching journal entry %s (%s)" % (item['item'], item['action'])
+				log("Fetching journal entry %s (%s)" % (item['item'], item['action']))
 				entry = fetchItem(item)
 				
 				# pulling this out into stages to make the logic clearer
@@ -718,18 +715,18 @@ def synchronizeJournals(migrate = 0):
 					while keepTrying:
 						try:
 							if not entry_hash[gSourceAccount.journal].has_key(item['item'][2:]):
-								print "    migrating entry to", gDestinationAccount.journal
+								log("    migrating entry to %s" % gDestinationAccount.journal)
 								result = gDestinationAccount.postEntry(entry)
 								entry_hash[gSourceAccount.journal][item['item'][2:]] = result.get('itemid', -1)
 								recordEntryHash(entry_hash)
 								migrationCount += 1
 							elif item['action'] == 'update':
-								print "   updating migrated entry in", gDestinationAccount.journal
+								log("   updating migrated entry in %s" % gDestinationAccount.journal)
 								result = gDestinationAccount.editEntry(entry, entry_hash[gSourceAccount.journal][item['item'][2:]])
 								migrationCount += 1
 							keepTrying = 0
 						except socket.gaierror, e:
-							print "Socket error. Double-check your account information, and your net connection."
+							exception("Socket error. Double-check your account information, and your net connection.", e)
 							keepTrying = 0
 						except exceptions.KeyboardInterrupt, e:
 							# TODO cleanup
@@ -737,8 +734,7 @@ def synchronizeJournals(migrate = 0):
 						except xmlrpclib.Fault, e:
 							code = int(e.faultCode)
 							if code == 101:
-								print "Fault reported is:",e.faultString
-								print "Password on destination is incorrect? Retrying anyway..."
+								log("Fault reported is: %s; retrying" % e.faultString)
 								keepTrying -= 1
 							elif code == 205:
 								# Client error: Unknown metadata: taglist
@@ -748,20 +744,17 @@ def synchronizeJournals(migrate = 0):
 									del entry['props'][badprop]
 									keepTrying -= 1
 								else:
-									print "Fault:",e.faultString
+									log("Fault: %s; not retrying" % e.faultString)
 									keepTrying = 0
 							elif code == 302:
-								print "Fault:",e.faultString
-								print "Something's out of sync."
+								log("Fault: %s; something is badly out of sync." % e.faultString)
 								keepTrying = 0
 							else:
 								traceback.print_exc(5)
 								# faultString
 								keepTrying = 0
 						except exceptions.Exception, x:
-							print "Error getting item: %s" % item['item']
-							traceback.print_exc(5)
-							#pprint.pprint(x)
+							exception("reposting item: %s" % item['item'], x)
 							errors += 1
 							keepTrying = 0
 					
@@ -774,9 +767,9 @@ def synchronizeJournals(migrate = 0):
 			recordLastSync(lastsync, lastmaxid)
 
 	if migrationCount == 1:
-		"One entry migrated or updated on destination."
+		log("One entry migrated or updated on destination.")
 	else:
-		print "%d entries migrated or updated on destination." % (migrationCount, )
+		log("%d entries migrated or updated on destination." % (migrationCount, ))
 	
 	recordEntryHash(entry_hash)
 
@@ -794,7 +787,7 @@ def synchronizeJournals(migrate = 0):
 	except:
 		usermap = {}
 		
-	print "Fetching journal comments for: %s" % gSourceAccount.journal
+	log("Fetching journal comments for: %s" % gSourceAccount.journal)
 	
 	maxid = lastmaxid
 	while 1:
@@ -856,7 +849,7 @@ def synchronizeJournals(migrate = 0):
 						found = 1
 						break
 				if found:
-					print "Warning: downloaded duplicate comment id %d in jitemid %s" % (id, jitemid)
+					log("Warning: downloaded duplicate comment id %d in jitemid %s" % (id, jitemid))
 				else:
 					if allEntries.has_key(jitemid):
 						cmt = Comment(comment)
@@ -879,7 +872,7 @@ def synchronizeJournals(migrate = 0):
 	recordLastSync(lastsync, lastmaxid)
 		
 	if gGenerateHtml:
-		print "Now generating a simple html version of your posts + comments."
+		log("Now generating a simple html version of your posts + comments.")
 		htmlpath = os.path.join(gSourceAccount.journal, 'html')
 		if not os.path.exists(htmlpath):
 			firstTime = 1
@@ -894,20 +887,40 @@ def synchronizeJournals(migrate = 0):
 			try:
 				allEntries[id].emit(htmlpath);
 			except StandardError, e:
-				print "skipping post", id, "because of error:", str(e)
-				traceback.print_exc(5)
+				exception("skipping post %s because of error:" % id, e)
 			
 		emitIndex(htmlpath, firstTime)
 	
-	print "Local archive complete!"
+	log("Local archive complete!")
 
 	if origlastsync:
-		print "%d new entries, %d new comments (since %s),  %d new comments by user" % (newentries, newcomments, origlastsync, commentsBy)
+		log("%d new entries, %d new comments (since %s),  %d new comments by user" % (newentries, newcomments, origlastsync, commentsBy))
 	else:
-		print "%d entries, %d comments, %d comments by user" % (newentries, newcomments, commentsBy)
+		log("%d entries, %d comments, %d comments by user" % (newentries, newcomments, commentsBy))
 	if errors > 0:
-		print "%d errors" % errors
+		log("%d errors" % errors)
 
+def log(message):
+	try:
+		print message
+	except:
+		print "error logging message, of all things"
+	try:
+		gSourceAccount.runlog.write(message+"\n")
+	except:
+		pass
+
+def exception(message, exception):
+	try:
+		print "ERROR:", message, str(exception)
+		traceback.print_exc(5)
+	except:
+		print "error printing error message, of all things"
+	try:
+		gSourceAccount.runlog.write(message+"\n")
+		gSourceAccount.runlog.write(exception+"\n")
+	except:
+		pass
 
 
 def main(retryMigrate = 0, communitiesOnly = 0, skipUserPics = 0):
@@ -916,6 +929,13 @@ def main(retryMigrate = 0, communitiesOnly = 0, skipUserPics = 0):
 	if not os.path.exists(gSourceAccount.user):
 		os.makedirs(gSourceAccount.user)
 		print "Created subdirectory: %s" % gSourceAccount.user
+		
+	path = gSourceAccount.metapath()
+	if not os.path.exists(path):
+		os.makedirs(path)
+	gSourceAccount.runlog = codecs.open(os.path.join(path, "ljmigrate.log"), 'a', 'utf-8', 'replace')
+	log("----------\nljmigrate run started: %s" % time.asctime())
+	log("Version: %s" % __version__)
 	
 	gSourceAccount.makeSession()
 	if not skipUserPics:
@@ -936,6 +956,9 @@ def main(retryMigrate = 0, communitiesOnly = 0, skipUserPics = 0):
 		for comm in gSourceAccount.journal_list:
 			gSourceAccount.journal = comm
 			synchronizeJournals(0)
+	
+	log("Run ended normally: %s" % time.asctime())
+	gSourceAccount.runlog.close()
 	
 	
 		
@@ -996,7 +1019,7 @@ no options: archive & migrate posts from one LJ account to another
 -n, --nuke : delete ALL posts in the specified account; see README for details
 -r, --retry : run through all posts on source, re-trying to migrate posts that
               weren't migrated the first time
--r, --communities-only : migrate/archive *only* communities
+-c, --communities-only : migrate/archive *only* communities
 -u, --user-pics-skip : don't back up user pics this run
 -v, --version : print version
 -h, --help : print this usage info"""

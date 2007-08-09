@@ -152,8 +152,8 @@ In your config sections for "source" and "destination", add the names of
 the communities you want to back up or migrate:
 
 	[source]
-	server: http://insanejournal.com
-	user: user_to_nuke
+	server: http://livejournal.com
+	user: my_original_user
 	password: the_password
 	communities: pony_fans cardboard_fans comm_to_archive_and_not_move
 
@@ -161,11 +161,11 @@ the communities you want to back up or migrate:
 	server: http://insanejournal.com
 	user: my_new_user
 	password: the_password
-	communities: pony_asylum cardboard_fans 
+	communities: pony_asylum cardboard_mania 
 
 All three communities will be archived, and these migrations will happen:
 pony_fans => pony_asylum
-cardboard_fans => cardboard_fans
+cardboard_fans => cardboard_mania
 comm_to_archive_and_not_move not migrated
 
 NOTE! You'll be the poster of any migrated community entries. By default the
