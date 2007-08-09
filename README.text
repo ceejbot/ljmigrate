@@ -48,7 +48,9 @@ This will skip entries it successfully moved before.
 ## To use: long version
 
 * If your journal is an older one, you might need to convert it to Unicode.
-  Visit this url and follow the instructions. If you 
+  Visit this url and follow the instructions. If your journal was created in
+  the last three years, or if you've ever done this conversion before, you 
+  don't need to do this. 
 
 	http://www.livejournal.com/settings/?c=OldEncoding
 	http://www.livejournal.com/support/faqbrowse.bml?faqid=143&q=unicode&lang=
@@ -129,6 +131,7 @@ username/
 		00001.html
 		00002.html
 	metadata/
+		ljmigrate.log (logfile, with error reports)
 		(program state, including the last time we synced)
 		
 If you're migrating, the posts at the destination will have all metadata
