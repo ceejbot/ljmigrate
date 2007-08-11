@@ -30,7 +30,7 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.3 070805j Wed Aug  8 21:21:33 PDT 2007'
+__version__ = '1.3 070805j Wed Aug  8 23:12:34 PDT 2007'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
@@ -841,29 +841,35 @@ def synchronizeJournals(migrate = 0):
 				}
 				if usermap.has_key(c.getAttribute("posterid")):
 					comment["user"] = usermap[c.getAttribute("posterid")]
+
+				path = os.path.join(gSourceAccount.journal, makeItemName(jitemid, 'entry'))
+				if not os.path.exists(path):
+					os.makedirs(path)
 				try:
-					entry = xml.dom.minidom.parse("%s/C-%s" % (gSourceAccount.journal, jitemid))
+					entry = xml.dom.minidom.parse(os.path.join(path, "comments.xml"))
 				except:
 					entry = xml.dom.minidom.getDOMImplementation().createDocument(None, "comments", None)
+
 				found = 0
 				for d in entry.getElementsByTagName("comment"):
 					if int(d.getElementsByTagName("id")[0].firstChild.nodeValue) == id:
 						found = 1
 						break
+
 				if found:
 					log("Warning: downloaded duplicate comment id %d in jitemid %s" % (id, jitemid))
 				else:
 					if allEntries.has_key(jitemid):
 						cmt = Comment(comment)
 						allEntries[jitemid].addComment(cmt)
-					entry.documentElement.appendChild(createxml(entry, "comment", comment))				
-					path = os.path.join(gSourceAccount.journal, makeItemName(jitemid, 'entry'))
-					if not os.path.exists(path):
-						os.makedirs(path)
+					entry.documentElement.appendChild(createxml(entry, "comment", comment))
+					
 					f = codecs.open(os.path.join(path, "comments.xml"), "w", "UTF-8")
 					entry.writexml(f)
 					f.close()
+					
 					newcomments += 1
+
 				if id > maxid:
 					maxid = id
 			if maxid >= newmaxid:
