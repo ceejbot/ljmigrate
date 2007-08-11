@@ -30,7 +30,7 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.3 070805j Wed Aug  8 23:12:34 PDT 2007'
+__version__ = '1.3 070805k Sat Aug 11 16:27:42 PDT 2007'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
@@ -89,7 +89,7 @@ class Account(object):
 			fp = open(os.path.join(self.metapath(), name), 'w')
 		return fp
 	
-	def readMetaDataFile(self, name, usecodec = 1):
+	def readMetadataFile(self, name, usecodec = 1):
 		if usecodec:
 			fp = codecs.open(os.path.join(self.metapath(), name), 'r', 'utf-8', 'replace')
 		else:
@@ -257,7 +257,7 @@ class Account(object):
 		return result
 		
 	def fetchUserPics(self):
-		log("Fetching userpics for: %s" % self.user)
+		log("Fetching new userpics for: %s" % self.user)
 	
 		r = self.getUserPics()
 		userpics = {}
@@ -265,35 +265,53 @@ class Account(object):
 			userpics[str(r['pickws'][i])] = r['pickwurls'][i]
 		#userpics = dict(zip(r['pickws'], r['pickwurls']))
 		userpics['default'] = r['defaultpicurl']
-		
+
+		try:
+			fp = self.readMetadataFile("userpics.xml")
+			string = fp.read()
+			string = string.encode("utf-8", "replace")
+			iconXML = xml.dom.minidom.parseString(string)
+			userpictypes = {}
+			for p in iconXML.getElementsByTagName("userpic"):
+				key = p.getAttribute('keyword')
+				type = p.getAttribute('type')
+				userpictypes[key] = type
+		except Exception, e:
+			#exception("wtf", e)
+			userpictypes = {}
+
 		path = os.path.join(self.user, "userpics")
 		if not os.path.exists(path):
 			os.makedirs(path)
 		f = self.openMetadataFile("userpics.xml")
-		print >>f, """<?xml version="1.0"?>"""
-		print >>f, "<userpics>"
+		
+		f.write('<?xml version="1.0" encoding="utf-8" ?>\n')
+		f.write("<userpics>\n")
 		for p in userpics:
 			kwd = p.decode('utf-8', 'replace')
-			log(u'    Getting pic for keywords "%s"' % kwd.encode('ascii', 'replace'))
-			f.write(u'<userpic keyword="%s" url="%s" />\n' % (kwd, userpics[p]))
-			try:
-				r = urllib2.urlopen(userpics[p])
-				if r:
-					data = r.read()
-					type = imghdr.what(r, data)
-					if p == "*":
-						picfn = os.path.join(path, "default.%s" % type)
-					else:
-						picfn = os.path.join(path, "%s.%s" % (canonicalizeFilename(p), type))
-					userPictHash[kwd] = unicode(picfn, 'utf-8', 'replace')
-					picfp = open(picfn, 'w')
-					picfp.write(data)
-					picfp.close()
-			except:
-				pass
-		print >>f, "</userpics>"
-		f.close()
+			
+			if not userpictypes.has_key(kwd) or not os.path.exists(os.path.join(path, "%s.%s" % (canonicalizeFilename(kwd), userpictypes[kwd]))):
+				log(u'    Getting pic for keywords "%s"' % kwd.encode('ascii', 'replace'))
+				try:
+					r = urllib2.urlopen(userpics[p])
+					if r:
+						data = r.read()
+						type = imghdr.what(r, data)
+						userpictypes[p] = type
+						if p == "*":
+							picfn = os.path.join(path, "default.%s" % type)
+						else:
+							picfn = os.path.join(path, "%s.%s" % (canonicalizeFilename(p), type))
+						userPictHash[kwd] = unicode(picfn, 'utf-8', 'replace')
+						picfp = open(picfn, 'w')
+						picfp.write(data)
+						picfp.close()
+				except:
+					pass
+			f.write(u'<userpic keyword="%s" url="%s" type="%s" />\n' % (kwd, userpics[p], userpictypes.get(p, "")))
 
+		f.write("</userpics>\n")
+		f.close()
 
 ###
 
@@ -471,6 +489,16 @@ class Entry(object):
 				self.commentids[comment.parentid].addChild(comment)
 			else:
 				self.comments.append(comment)
+	
+	def getStringAttribute(self, attr):
+		if not hasattr(self, attr):
+			return ""
+		item = getattr(self, attr)
+		if type(item) in [types.IntType, types.LongType, types.FloatType]:
+			return str(item)
+		if type(item) == types.UnicodeType:
+			return item
+		return unicode(item, 'utf-8', 'replace')
 
 	def emit(self, path):
 		if not hasattr(self, 'itemid'):
@@ -483,13 +511,13 @@ class Entry(object):
 			properties = {}
 
 		if hasattr(self, 'subject'):
-			subject = self.subject
+			subject = self.getStringAttribute('subject')
 			subject = userpattern.sub(r'<b><a href="http://\1.%s/"><img src="http://stat.livejournal.com/img/userinfo.gif" alt="[info]" width="17" height="17" style="vertical-align: bottom; border: 0;" />\1</a></b>' % gSourceAccount.site, subject)
 			subject = commpattern.sub(r'<b><a href="http://community.%s/\1/"><img src="http://stat.livejournal.com/img/community.gif" alt="[info]" width="16" height="16" style="vertical-align: bottom; border: 0;" />\1</a></b>' % gSourceAccount.site, subject)
 		else:
 			subject = "(No Subject)"
 		
-		result = unicode(doctype + tmpl_start_jour % (self.journalname, subject))
+		result = doctype + tmpl_start_jour % (self.journalname, subject)
 
 		if properties.has_key('picture_keyword'):
 			kw = properties['picture_keyword']
@@ -516,7 +544,7 @@ class Entry(object):
 		
 		if hasattr(self, 'event'):
 			result = result + '<br clear="left" />\n'
-			content = self.event.decode('utf-8', 'replace')
+			content = self.getStringAttribute('event')
 			if not self.props.has_key('opt_preformatted'):
 				content = content.replace("\n", "<br />\n");
 			content = userpattern.sub(r'<b><a href="http://\1.%s/"><img src="http://stat.livejournal.com/img/userinfo.gif" alt="[info]" width="17" height="17" style="vertical-align: bottom; border: 0;" />\1</a></b>' % gSourceAccount.site, content)
@@ -651,7 +679,7 @@ def synchronizeJournals(migrate = 0):
 	lastsync = ""
 	lastmaxid = 0
 	try:
-		f = gSourceAccount.readMetaDataFile("last_sync")
+		f = gSourceAccount.readMetadataFile("last_sync")
 		lastsync = f.readline()
 		if lastsync[-1] == '\n':
 			lastsync = lastsync[:len(lastsync)-1]
@@ -673,7 +701,7 @@ def synchronizeJournals(migrate = 0):
 		lastmaxid = 0
 
 	try:
-		f = gSourceAccount.readMetaDataFile('entry_correspondences.hash', 0)
+		f = gSourceAccount.readMetadataFile('entry_correspondences.hash', 0)
 		entry_hash = pickle.load(f)
 		f.close()
 		test = entry_hash.keys()
@@ -776,14 +804,14 @@ def synchronizeJournals(migrate = 0):
 	recordEntryHash(entry_hash)
 
 	try:
-		f = gSourceAccount.readMetaDataFile('comment.meta', 0)
+		f = gSourceAccount.readMetadataFile('comment.meta', 0)
 		metacache = pickle.load(f)
 		f.close()
 	except:
 		metacache = {}
 	
 	try:
-		f = gSourceAccount.readMetaDataFile('user.map', 0)
+		f = gSourceAccount.readMetadataFile('user.map', 0)
 		usermap = pickle.load(f)
 		f.close()
 	except:
@@ -895,9 +923,11 @@ def synchronizeJournals(migrate = 0):
 			try:
 				allEntries[id].emit(htmlpath);
 			except StandardError, e:
-				exception("skipping post %s because of error:" % id, e)
-			
-		emitIndex(htmlpath, firstTime)
+				exception("skipping building html for post %s because of error:" % id, e)
+		try:
+			emitIndex(htmlpath, firstTime)
+		except StandardError, e:
+			exception("skipping html index generation because of error:" % id, e)
 	
 	log("Local archive complete!")
 
