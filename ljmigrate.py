@@ -6,7 +6,7 @@ Extensive modifications by antennapedia.
 Version 1.3
 3 August 2007
 
-BSD licence mumbo-jumbo to follow. By which I mean, do what you want.s
+BSD licence mumbo-jumbo to follow. By which I mean, do what you want.
 See README.text for documentation.
 """
 
@@ -256,8 +256,8 @@ class Account(object):
 		result = self.server_proxy.LJ.XMLRPC.editevent(params)
 		return result
 		
-	def fetchUserPics(self):
-		log("Fetching new userpics for: %s" % self.user)
+	def fetchUserPics(self, dontbackup=1):
+		log("Recording userpic keyword info for: %s" % self.user)
 	
 		r = self.getUserPics()
 		userpics = {}
@@ -290,7 +290,7 @@ class Account(object):
 		for p in userpics:
 			kwd = p.decode('utf-8', 'replace')
 			
-			if not userpictypes.has_key(kwd) or not os.path.exists(os.path.join(path, "%s.%s" % (canonicalizeFilename(kwd), userpictypes[kwd]))):
+			if not dontbackup and not userpictypes.has_key(kwd) or not os.path.exists(os.path.join(path, "%s.%s" % (canonicalizeFilename(kwd), userpictypes[kwd]))):
 				log(u'    Getting pic for keywords "%s"' % kwd.encode('ascii', 'replace'))
 				try:
 					r = urllib2.urlopen(userpics[p])
@@ -884,9 +884,7 @@ def synchronizeJournals(migrate = 0):
 						found = 1
 						break
 
-				if found:
-					log("Warning: downloaded duplicate comment id %d in jitemid %s" % (id, jitemid))
-				else:
+				if not found:
 					if allEntries.has_key(jitemid):
 						cmt = Comment(comment)
 						allEntries[jitemid].addComment(cmt)
@@ -977,8 +975,7 @@ def main(retryMigrate = 0, communitiesOnly = 0, skipUserPics = 0):
 	log("Version: %s" % __version__)
 	
 	gSourceAccount.makeSession()
-	if not skipUserPics:
-		gSourceAccount.fetchUserPics()
+	gSourceAccount.fetchUserPics(skipUserPics)
 	if not communitiesOnly:
 		synchronizeJournals(gMigrate)
 	
