@@ -787,9 +787,11 @@ def synchronizeJournals(migrate = 0):
 							exception("reposting item: %s" % item['item'], x)
 							errors += 1
 							keepTrying = 0
+				# end if migrate
 					
 			elif item['item'].startswith('C-'):
 				commentsBy += 1
+				# I think there's no way to download the comment? buh?
 				#print "Skipping comment %s by user (%s)" % (item['item'], item['action'])
 			else:
 				pprint.pprint(item)
