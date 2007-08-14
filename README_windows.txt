@@ -30,7 +30,7 @@ Pitch the file named "ljmigrate.cfg", and make a copy of
 the sample config uses Windows line endings, and is simpler to use.
 
 Edit the config file using Notepad or a similar plain text file editor.
-Follow the instructions in the main README for how to edit.
+Follow the instructions in the main README for how to set it up.
 
 ## Running the tool
 
@@ -41,7 +41,7 @@ Start by reading through the Python Windows FAQ, which explains a lot:
 	http://me.in-berlin.de/doc/python/faq/windows.html
 
 Run through the steps described there to make sure you have python available
-to run from a command prompt.
+to run from a DOS command prompt.
 
 Change directories so you're in the same folder as the script and the
 config file. Run the script this way:

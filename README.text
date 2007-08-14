@@ -178,7 +178,14 @@ don't care that you'll be the poster on the other end, set this option:
 	[settings]
 	migrate-community-posts-by-others: 1
 	
-Feature not very well tested yet.
+If you enable moving posts by other people, each migrated post that you didn't
+make originally will have the original poster's name added at the top.
+
+NOTE! Moving communities has one other limitation to know in advance:
+community posts can't be back-dated the way regular journal posts can
+be. That means if you migrate a journal, every single post will appear
+as new in member's friendslists. This is a restriction imposed by the LJ client
+protocol.
 
 
 ## Secret nuclear option
