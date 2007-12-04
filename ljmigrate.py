@@ -4,7 +4,7 @@
 Based on ljdump; original ljdump license & header in LICENCE.text.
 Extensive modifications by antennapedia.
 Version 1.3
-3 August 2007
+3 December 2007
 
 BSD licence mumbo-jumbo to follow. By which I mean, do what you want.
 See README.text for documentation.
@@ -12,9 +12,9 @@ See README.text for documentation.
 
 import codecs
 import exceptions
-import getopt
 import imghdr
 import md5
+from optparse import OptionParser
 import os
 import pickle
 import pprint
@@ -30,7 +30,7 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.3 070805k Sat Aug 11 16:27:42 PDT 2007'
+__version__ = '1.3 071203l Mon Dec  3 22:58:02 PST 2007'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
@@ -256,7 +256,7 @@ class Account(object):
 		result = self.server_proxy.LJ.XMLRPC.editevent(params)
 		return result
 		
-	def fetchUserPics(self, dontbackup=1):
+	def fetchUserPics(self, skipUserPics=1):
 		log("Recording userpic keyword info for: %s" % self.user)
 	
 		r = self.getUserPics()
@@ -290,7 +290,7 @@ class Account(object):
 		for p in userpics:
 			kwd = p.decode('utf-8', 'replace')
 			
-			if not dontbackup and not userpictypes.has_key(kwd) or not os.path.exists(os.path.join(path, "%s.%s" % (canonicalizeFilename(kwd), userpictypes[kwd]))):
+			if (not skipUserPics) and not (userpictypes.has_key(kwd) or not os.path.exists(os.path.join(path, "%s.%s" % (canonicalizeFilename(kwd), userpictypes[kwd])))):
 				log(u'    Getting pic for keywords "%s"' % kwd.encode('ascii', 'replace'))
 				try:
 					r = urllib2.urlopen(userpics[p])
@@ -661,7 +661,7 @@ def fetchItem(item):
 	return entry
 
 		
-def synchronizeJournals(migrate = 0):
+def synchronizeJournals(migrate = 0, retryMigrate = 0):
 	log("Fetching journal entries for: %s" % gSourceAccount.journal)
 	if not os.path.exists(gSourceAccount.journal):
 		os.makedirs(gSourceAccount.journal)
@@ -979,7 +979,7 @@ def main(retryMigrate = 0, communitiesOnly = 0, skipUserPics = 0):
 	gSourceAccount.makeSession()
 	gSourceAccount.fetchUserPics(skipUserPics)
 	if not communitiesOnly:
-		synchronizeJournals(gMigrate)
+		synchronizeJournals(gMigrate, retryMigrate)
 	
 	if gDestinationAccount:
 		accounts = map(None, gSourceAccount.journal_list, gDestinationAccount.journal_list)
@@ -987,13 +987,13 @@ def main(retryMigrate = 0, communitiesOnly = 0, skipUserPics = 0):
 			gSourceAccount.journal = pair[0]
 			if pair[1]:
 				gDestinationAccount.journal = pair[1]
-				synchronizeJournals(1)
+				synchronizeJournals(1, retryMigrate)
 			else:
-				synchronizeJournals(0)
+				synchronizeJournals(0, retryMigrate)
 	else:
 		for comm in gSourceAccount.journal_list:
 			gSourceAccount.journal = comm
-			synchronizeJournals(0)
+			synchronizeJournals(0, retryMigrate)
 	
 	log("Run ended normally: %s" % time.asctime())
 	gSourceAccount.runlog.close()
@@ -1051,56 +1051,28 @@ def nukeall():
 	print "Deleted %d items." % (deleted, )
 	
 
-def usage():
-	print """ljmigrate.py
-no options: archive & migrate posts from one LJ account to another
--n, --nuke : delete ALL posts in the specified account; see README for details
--r, --retry : run through all posts on source, re-trying to migrate posts that
-              weren't migrated the first time
--c, --communities-only : migrate/archive *only* communities
--u, --user-pics-skip : don't back up user pics this run
--v, --version : print version
--h, --help : print this usage info"""
-	version()
-
-
 def version():
 	print "ljmigrate.py version", __version__
 	sys.exit();
 	
 	
-
 if __name__ == '__main__':
-	try:
-		optlist, pargs = getopt.getopt(sys.argv[1:], 'nrhvcu', ['nuke', 'retry', 'help', 'version', 'communities-only', 'user-pics-skip'])
-	except getopt.GetoptError, e:
-		print e
-		usage()
-
-	options = {}
-	for pair in optlist:
-		options[pair[0]] = pair[1]
+	usage = "usage: %prog [options]"
+	version = "%prog " + __version__
+	parser = OptionParser(usage=usage, version=version)
 	
-	if options.has_key('--help') or options.has_key('-h'):
-		usage()
-
-	if options.has_key('--version') or options.has_key('-v'):
-		version()
+	parser.add_option('-r', '--retry', action='store_true', dest='retryMigrate', default=0,
+		help="run through all posts on source, re-trying to migrate posts that weren't migrated the first time")
+	parser.add_option('-u', '--user-pics-skip', action='store_true', dest='skipUserPics', default=0,
+		help="don't back up icons/userpics this run")
+	parser.add_option('-c', '--communities-only', action='store_true', dest='commsOnly', default=0,
+		help="migrate/archive *only* communities")
+	parser.add_option('-n', '--nuke', action='store_true', dest='nuke',
+		help="delete ALL posts in the specified account; see README for details")
 	
-	retryMigrate = 0
-	if options.has_key('--retry') or options.has_key('-r'):
-		retryMigrate = 1
+	(options, args) = parser.parse_args()
 
-	skipUserPics = 0
-	if options.has_key('--user-pics-skip') or options.has_key('-u'):
-		skipUserPics = 1
-
-	commsOnly = 0
-	if options.has_key('--communities-only') or options.has_key('-c'):
-		commsOnly = 1
-
-	if options.has_key('--nuke') or options.has_key('-n'):
+	if options.nuke:
 		nukeall()
 	else:
-		main(retryMigrate, commsOnly, skipUserPics)
-
+		main(options.retryMigrate, options.commsOnly, options.skipUserPics)
