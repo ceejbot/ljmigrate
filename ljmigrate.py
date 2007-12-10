@@ -30,7 +30,7 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.3 071203l Mon Dec  3 22:58:02 PST 2007'
+__version__ = '1.3 071207a Fri Dec  7 14:30:44 PST 2007'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
@@ -290,7 +290,7 @@ class Account(object):
 		for p in userpics:
 			kwd = p.decode('utf-8', 'replace')
 			
-			if (not skipUserPics) and not (userpictypes.has_key(kwd) or not os.path.exists(os.path.join(path, "%s.%s" % (canonicalizeFilename(kwd), userpictypes[kwd])))):
+			if (not skipUserPics) and (userpictypes.has_key(kwd) and not os.path.exists(os.path.join(path, "%s.%s" % (canonicalizeFilename(kwd), userpictypes[kwd])))):
 				log(u'    Getting pic for keywords "%s"' % kwd.encode('ascii', 'replace'))
 				try:
 					r = urllib2.urlopen(userpics[p])
@@ -1069,7 +1069,7 @@ if __name__ == '__main__':
 		help="migrate/archive *only* communities")
 	parser.add_option('-n', '--nuke', action='store_true', dest='nuke',
 		help="delete ALL posts in the specified account; see README for details")
-	
+
 	(options, args) = parser.parse_args()
 
 	if options.nuke:
