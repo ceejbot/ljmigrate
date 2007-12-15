@@ -6,15 +6,16 @@ TODO
 - After-the-fact html generation for existing archives.
 - Use local archive to migrate to a new destination.
 - Migrate friend groups & custom filters.
-- Stop assuming LJ is source server in regexps etc.
-- Notice if we already have a user pic and skip it.
+- Optional migration of single journal to group journal (aka community).
 
 IN PROGRESS
 
-- Archives for communities.
 - 200 lines of main()? Ugh. Clean up.
 - Command line options for everything + usage info.
 
 COMPLETED
 
 - Generate html for comments along with each entry.
+- Stop assuming LJ is source server in regexps etc.
+- Notice if we already have a user pic and skip it.
+- Archives for communities.
