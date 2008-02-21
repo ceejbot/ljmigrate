@@ -256,7 +256,7 @@ class Account(object):
 		result = self.server_proxy.LJ.XMLRPC.editevent(params)
 		return result
 		
-	def fetchUserPics(self, skipUserPics=1):
+	def fetchUserPics(self, dontFetchImageData=1):
 		log("Recording userpic keyword info for: %s" % self.user)
 	
 		r = self.getUserPics()
@@ -277,7 +277,7 @@ class Account(object):
 				type = p.getAttribute('type')
 				userpictypes[key] = type
 		except Exception, e:
-			#exception("wtf", e)
+			exception("wtf", e)
 			userpictypes = {}
 
 		path = os.path.join(self.user, "userpics")
@@ -290,8 +290,17 @@ class Account(object):
 		for p in userpics:
 			kwd = p.decode('utf-8', 'replace')
 			
-			if (not skipUserPics) and (userpictypes.has_key(kwd) and not os.path.exists(os.path.join(path, "%s.%s" % (canonicalizeFilename(kwd), userpictypes[kwd])))):
-				log(u'    Getting pic for keywords "%s"' % kwd.encode('ascii', 'replace'))
+			doDownload = 0
+			if userpictypes.has_key(kwd):
+				picfn = os.path.join(path, "%s.%s" % (canonicalizeFilename(kwd), userpictypes[kwd]))
+				if not os.path.exists(picfn):
+					doDownload = 1
+			else:
+				doDownload = 1
+			if dontFetchImageData: doDownload = 0 # but respect the flag
+			
+			if doDownload:
+				log(u'    Getting image data for keywords "%s"' % kwd.encode('ascii', 'replace'))
 				try:
 					r = urllib2.urlopen(userpics[p])
 					if r:
@@ -308,7 +317,7 @@ class Account(object):
 						picfp.close()
 				except:
 					pass
-			f.write(u'<userpic keyword="%s" url="%s" type="%s" />\n' % (kwd, userpics[p], userpictypes.get(p, "")))
+			f.write(u'<userpic keyword="%s" url="%s" type="%s" />\n' % (saxutils.escape(kwd), userpics[p], userpictypes.get(p, "")))
 
 		f.write("</userpics>\n")
 		f.close()
@@ -662,6 +671,8 @@ def fetchItem(item):
 
 		
 def synchronizeJournals(migrate = 0, retryMigrate = 0):
+	""" This method is an embarrassment. Refactor to make it much smaller.
+	"""
 	log("Fetching journal entries for: %s" % gSourceAccount.journal)
 	if not os.path.exists(gSourceAccount.journal):
 		os.makedirs(gSourceAccount.journal)
@@ -962,7 +973,7 @@ def exception(message, exc):
 		pass
 
 
-def main(retryMigrate = 0, communitiesOnly = 0, skipUserPics = 0):
+def main(retryMigrate = 0, communitiesOnly = 0, skipUserPics = 0, userPicsOnly = 0):
 	fetchConfig()
 
 	if not os.path.exists(gSourceAccount.user):
@@ -976,8 +987,16 @@ def main(retryMigrate = 0, communitiesOnly = 0, skipUserPics = 0):
 	log("----------\nljmigrate run started: %s" % time.asctime())
 	log("Version: %s" % __version__)
 	
+	dontFetchImageData = not userPicsOnly and skipUserPics
+	
 	gSourceAccount.makeSession()
-	gSourceAccount.fetchUserPics(skipUserPics)
+	gSourceAccount.fetchUserPics(dontFetchImageData)
+	
+	if userPicsOnly:
+		log("Run ended normally: %s" % time.asctime())
+		gSourceAccount.runlog.close()
+		return
+	
 	if not communitiesOnly:
 		synchronizeJournals(gMigrate, retryMigrate)
 	
@@ -1069,10 +1088,12 @@ if __name__ == '__main__':
 		help="migrate/archive *only* communities")
 	parser.add_option('-n', '--nuke', action='store_true', dest='nuke',
 		help="delete ALL posts in the specified account; see README for details")
+	parser.add_option('-p', '--user-pics-only', action='store_true', dest='userPicsOnly', default=0,
+		help="just back up user pics")
 
 	(options, args) = parser.parse_args()
 
 	if options.nuke:
 		nukeall()
 	else:
-		main(options.retryMigrate, options.commsOnly, options.skipUserPics)
+		main(options.retryMigrate, options.commsOnly, options.skipUserPics, options.userPicsOnly)
