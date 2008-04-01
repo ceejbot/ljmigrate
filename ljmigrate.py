@@ -4,7 +4,7 @@
 Based on ljdump; original ljdump license & header in LICENCE.text.
 Extensive modifications by antennapedia.
 Version 1.3
-3 December 2007
+1 April 2008
 
 BSD licence mumbo-jumbo to follow. By which I mean, do what you want.
 See README.text for documentation.
@@ -30,7 +30,7 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.3 071207a Fri Dec  7 14:30:44 PST 2007'
+__version__ = '1.3 080401a Tue Apr  1 15:21:17 PDT 2008'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
@@ -277,7 +277,7 @@ class Account(object):
 				type = p.getAttribute('type')
 				userpictypes[key] = type
 		except Exception, e:
-			exception("wtf", e)
+			#exception("wtf", e)
 			userpictypes = {}
 
 		path = os.path.join(self.user, "userpics")
@@ -643,13 +643,17 @@ def fetchItem(item):
 	keepTrying = 3
 	while keepTrying:
 		try:
-			entry = gSourceAccount.getOneEvent(item['item'][2:])
+			itemid = item['item']
+			if itemid.startswith('L-') or itemid.startswith('C-'):
+				itemid = itemid[2:]
+
+			entry = gSourceAccount.getOneEvent(itemid)
 			writedump(gSourceAccount.journal, item['item'], 'entry', entry)
 			entry['event'] = convertBinary(entry['event'])
 
 			if gGenerateHtml:
 				eobj = Entry(entry, gSourceAccount.user, gSourceAccount.journal)
-				allEntries[item['item'][2:]] = eobj
+				allEntries[itemid] = eobj
 			newentries += 1
 			keepTrying = 0
 
