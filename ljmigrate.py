@@ -30,7 +30,7 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.3 080401a Tue Apr  1 15:21:17 PDT 2008'
+__version__ = '1.3 080402a Wed Apr  2 08:15:19 PDT 2008'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
@@ -170,7 +170,11 @@ class Account(object):
 		
 		params = self.doChallenge(params)
 		e = self.server_proxy.LJ.XMLRPC.getevents(params)
-		return e['events'][0]
+		if len(e['events']) > 0:
+			return e['events'][0]
+		else:
+			log(e)
+			return None
 		
 	def postEntry(self, entry):
 		params = {
@@ -373,6 +377,34 @@ def canonicalizeFilename(input):
 	result = result.replace(' ', '_')
 	return result
 
+#-------------------------------------------------------------------------------
+# logging utilities
+
+def log(message):
+	try:
+		print message
+	except:
+		print "error logging message, of all things"
+	try:
+		gSourceAccount.runlog.write(message+"\n")
+	except:
+		pass
+
+def exception(message, exc):
+	try:
+		print "ERROR:", message, str(exc)
+		traceback.print_exc(5)
+	except:
+		print "error printing error message, of all things"
+	try:
+		gSourceAccount.runlog.write(message+"\n")
+		text = traceback.format_exc(5)
+		gSourceAccount.runlog.write(text+"\n")
+	except:
+		pass
+
+#-------------------------------------------------------------------------------
+# configuration file parsing
 
 def fetchConfig():
 	global gSourceAccount, gDestinationAccount, gMigrate, gGenerateHtml, gMigrateOwnOnly
@@ -450,7 +482,7 @@ def fetchConfig():
 	except ConfigParser.NoOptionError, e:
 		pass
 
-###
+#-------------------------------------------------------------------------------
 # html generation
 # poor man's html template; for generating correct html
 
@@ -648,6 +680,9 @@ def fetchItem(item):
 				itemid = itemid[2:]
 
 			entry = gSourceAccount.getOneEvent(itemid)
+			if not entry:
+				log("Source returned unexpected result when queried for item %s" % (item['item']))
+				return None
 			writedump(gSourceAccount.journal, item['item'], 'entry', entry)
 			entry['event'] = convertBinary(entry['event'])
 
@@ -673,7 +708,9 @@ def fetchItem(item):
 			keepTrying = 0
 	return entry
 
-		
+#-------------------------------------------------------------------------------
+# The migration function.
+
 def synchronizeJournals(migrate = 0, retryMigrate = 0):
 	""" This method is an embarrassment. Refactor to make it much smaller.
 	"""
@@ -739,6 +776,7 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 			if item['item'][0] == 'L':
 				log("Fetching journal entry %s (%s)" % (item['item'], item['action']))
 				entry = fetchItem(item)
+				if not entry: continue
 				
 				# pulling this out into stages to make the logic clearer
 				# only migrate if we have the option set, if we have a destination account, AND we have an entry to move
@@ -953,29 +991,7 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 	if errors > 0:
 		log("%d errors" % errors)
 
-def log(message):
-	try:
-		print message
-	except:
-		print "error logging message, of all things"
-	try:
-		gSourceAccount.runlog.write(message+"\n")
-	except:
-		pass
-
-def exception(message, exc):
-	try:
-		print "ERROR:", message, str(exc)
-		traceback.print_exc(5)
-	except:
-		print "error printing error message, of all things"
-	try:
-		gSourceAccount.runlog.write(message+"\n")
-		text = traceback.format_exc(5)
-		gSourceAccount.runlog.write(text+"\n")
-	except:
-		pass
-
+#-------------------------------------------------------------------------------
 
 def main(retryMigrate = 0, communitiesOnly = 0, skipUserPics = 0, userPicsOnly = 0):
 	fetchConfig()
