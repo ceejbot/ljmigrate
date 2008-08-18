@@ -6,6 +6,11 @@ migrate: True
 generate-html: True
 migrate-community-posts-by-others: 0
 
+[proxy]
+# This section is optional. Use it if you use a proxy to do your web browsing.
+host: localhost
+port: 8000
+
 [source]
 # The host of the journal you're backing up.
 server: http://livejournal.com

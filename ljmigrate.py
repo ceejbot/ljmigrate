@@ -3,8 +3,8 @@
 """
 Based on ljdump; original ljdump license & header in LICENCE.text.
 Extensive modifications by antennapedia.
-Version 1.3
-1 April 2008
+Version 1.4
+17 August 2008
 
 BSD licence mumbo-jumbo to follow. By which I mean, do what you want.
 See README.text for documentation.
@@ -12,6 +12,7 @@ See README.text for documentation.
 
 import codecs
 import exceptions
+import httplib
 import imghdr
 import md5
 from optparse import OptionParser
@@ -30,7 +31,7 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.3 080402a Wed Apr  2 08:15:19 PDT 2008'
+__version__ = '1.4 080817a Sun Aug 17 20:27:00 PDT 2008'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
@@ -49,10 +50,32 @@ def parsetime(input):
 	except ValueError, e:
 		#print e
 		return ()
+		
+
+# Stolen directly from the python xmlrpclib documentation.
+class ProxiedTransport(xmlrpclib.Transport):
+
+	def setProxy(self, proxy):
+		self.proxyhost = proxy
+
+	# overridden
+	def make_connection(self, host):
+		self.realhost = host
+		h = httplib.HTTP(self.proxyhost)
+		return h
+
+	# overridden
+	def send_request(self, connection, handler, request_body):
+		connection.putrequest("POST", 'http://%s%s' % (self.realhost, handler))
+		
+	# overridden
+	def send_host(self, connection, host):
+		connection.putheader('Host', self.realhost)
+
 
 class Account(object):
 
-	def __init__(self, host="", user="", password=""):
+	def __init__(self, host="", user="", password="", proxyHost=None, proxyPort=None):
 		if host.endswith('/'):
 			host = host[:-1]
 		m = re.search("(.*)/interface/xmlrpc", host)
@@ -71,7 +94,19 @@ class Account(object):
 		self.user = user
 		self.password = password
 		self.flat_api = self.host + "/interface/flat"
-		self.server_proxy = xmlrpclib.ServerProxy(self.host+"/interface/xmlrpc")
+		
+		if proxyHost != None:
+			proxy = proxyHost
+			if proxyPort != None:
+				proxy = proxy + ":" + proxyPort
+			transportProxy = ProxiedTransport()
+			transportProxy.setProxy(proxy)
+			# Note overloaded term "proxy". The xmlrpclib does this, unfortunately.
+			self.server_proxy = xmlrpclib.ServerProxy(self.host+"/interface/xmlrpc", transport=transportProxy)
+		else:
+			# default transport
+			self.server_proxy = xmlrpclib.ServerProxy(self.host+"/interface/xmlrpc")
+
 		self.session = ""
 		self.journal = user
 		self.journal_list = []
@@ -407,20 +442,33 @@ def exception(message, exc):
 # configuration file parsing
 
 def fetchConfig():
+	# needs major refactoring. sigh.
 	global gSourceAccount, gDestinationAccount, gMigrate, gGenerateHtml, gMigrateOwnOnly
 	try:
 		cfparser = ConfigParser.SafeConfigParser()
 	except StandardError, e:
 		cfparser = ConfigParser.ConfigParser()
-
+		
 	try:
 		cfparser.readfp(open(configpath))
 	except StandardError, e:
 		print "Problem reading config file: %s" % str(e)
 		sys.exit()
 	
+	pHost = None
+	pPort = None
 	try:
-		gSourceAccount = Account(cfparser.get('source', 'server'), cfparser.get('source', 'user'), cfparser.get('source', 'password'))
+		pHost = cfparser.get('proxy', 'host')
+		pPort = cfparser.get('proxy', 'port')
+	except ConfigParser.NoSectionError, e:
+		# not an error, because the proxy section is optional.
+		pass
+	except ConfigParser.NoOptionError, e:
+		# not an error
+		pass
+
+	try:
+		gSourceAccount = Account(cfparser.get('source', 'server'), cfparser.get('source', 'user'), cfparser.get('source', 'password'), pHost, pPort)
 	except ConfigParser.NoSectionError, e:
 		print "The configuration file has no 'source' section."
 		print "The tool can't run without a source journal set." 
@@ -458,7 +506,7 @@ def fetchConfig():
 	gDestinationAccount = None
 	if gMigrate:
 		try:
-			gDestinationAccount = Account(cfparser.get('destination', 'server'), cfparser.get('destination', 'user'), cfparser.get('destination', 'password'))
+			gDestinationAccount = Account(cfparser.get('destination', 'server'), cfparser.get('destination', 'user'), cfparser.get('destination', 'password'), pHost, pPort)
 		except ConfigParser.NoSectionError, e:
 			print "No destination journal specified in the config file; not migrating."
 			gMigrate = 0
@@ -1040,6 +1088,7 @@ def main(retryMigrate = 0, communitiesOnly = 0, skipUserPics = 0, userPicsOnly =
 	
 		
 def nukeall():
+	# note copy and pasted code blocks: refactor
 	try:
 		cfparser = ConfigParser.SafeConfigParser()
 	except StandardError, e:
@@ -1050,8 +1099,20 @@ def nukeall():
 		print "Problem reading config file: %s" % str(e)
 		sys.exit()
 	
+	pHost = None
+	pPort = None
 	try:
-		nukedAccount = Account(cfparser.get('nuke', 'server'), cfparser.get('nuke', 'user'), cfparser.get('nuke', 'password'))
+		pHost = cfparser.get('proxy', 'host')
+		pPort = cfparser.get('proxy', 'port')
+	except ConfigParser.NoSectionError, e:
+		# not an error, because the proxy section is optional.
+		pass
+	except ConfigParser.NoOptionError, e:
+		# not an error
+		pass
+
+	try:
+		nukedAccount = Account(cfparser.get('nuke', 'server'), cfparser.get('nuke', 'user'), cfparser.get('nuke', 'password'), pHost, pPort)
 	except StandardError, e:
 		print "No account set up for nuking. Discretion is the better part of valor."
 		sys.exit()
