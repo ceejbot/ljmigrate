@@ -89,6 +89,18 @@ This will skip entries it successfully moved before.
   This is the destination journal; the place you're migrating to. You can 
   leave the destination section out if you don't want to migrate.
 
+* Proxied connections to the net
+
+  Some workplaces use proxy servers to mediate all web traffic. If you've had
+  to tell your web browser to use an HTTP proxy, you'll need to give ljmigrate
+  the same information. You can omit the port. You should omit this section entirely
+  if you don't use a proxy.
+  
+	[proxy]
+	host: proxy-server-name
+	port: 8000
+	  
+  
 * Run the Terminal. It lives in Applications, in the Utilities folder.
 
 * In the terminal, change directories to the place where you unpacked the 
