@@ -1018,7 +1018,7 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 			firstTime = 0
 		
 		ids = allEntries.keys()
-		ids.sort()
+		ids.sort(lambda x,y: int(x)-int(y))
 		
 		for id in ids:
 			try:
