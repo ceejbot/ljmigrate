@@ -505,7 +505,7 @@ def fetchConfig():
 		
 	gMigrationTags = []
 	try:
-		item = cfparser.get('settings', 'migrate-tag')
+		item = cfparser.get('settings', 'migrate-these-tags')
 		if len(item) > 0: gMigrationTags = re.split(', |,| ', item)
 	except ConfigParser.NoOptionError, e:
 		pass

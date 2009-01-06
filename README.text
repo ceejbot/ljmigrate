@@ -1,4 +1,4 @@
-ljmigrate 1.3
+ljmigrate 1.4
 
 A tool for archiving posts from any LiveJournal clone site and optionally 
 migrating them to any other LJ-clone site. Useful for moving from LiveJournal
@@ -59,7 +59,7 @@ This will skip entries it successfully moved before.
   Make sure you use that EXACT name! Many editors will try to force on
   their filename ending, which will make the config file unfindable by
   the tool. For best results use TextEdit to edit the file. (Other
-  options are vim, emacs, BBEdit, and TextMate.)
+  options are vim, emacs, BBEdit, TextWrangler, and TextMate.)
 
 * Edit the settings in the config file.
 
@@ -67,11 +67,16 @@ This will skip entries it successfully moved before.
 	migrate: True
 	generate-html: True
 	migrate-community-posts-by-others: False
+	migrate-these-tags: fiction, meta
 	
   migrate: can be True or False. Set this to True if you want the tool to
   copy all your journal entries to another system.
   generate-html: can be True or False. Set this to True if you want the tool
   to make simple html files for your entries & all comments.
+  migrate-these-tags: If you want, you can migrate *only* posts that have one of the
+  given lists of tags. For instance, you might want to migrate your fic posts
+  but nothing else. If you want to migrate everything, just delete this entry
+  or leave it empty.
 
 	[source]
 	server: http://livejournal.com

@@ -4,7 +4,7 @@
 migrate: True
 # You can restrict migration to just the entries that have one of the following
 # tags. Use commas to separate tags in the list.
-migrate-tag: example 1, example tag 2, third tag I want to copy
+migrate-these-tags: example 1, example tag 2, third tag I want to copy
 # generate html for each entry? True or False
 generate-html: True
 # If you're migrating a community, do you want to grab your own posts or everybody's?
