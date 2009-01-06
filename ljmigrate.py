@@ -316,7 +316,7 @@ class Account(object):
 				type = p.getAttribute('type')
 				userpictypes[key] = type
 		except Exception, e:
-			#exception("wtf", e)
+			# eat the error and just get them all fresh
 			userpictypes = {}
 
 		path = os.path.join(self.user, "userpics")
@@ -513,8 +513,8 @@ def fetchConfig():
 		except ConfigParser.NoOptionError, e:
 			print "The configuration file is missing parameters for the destination journal."
 			print "We can't migrate without knowing the information for the destination." 
-			print "Copy the sample config and try again."
-			sys.exit()
+			print "Turning migration off."
+			gMigrate = 0
 		try:
 			jrn = cfparser.get('destination', 'communities').strip()
 			if len(jrn) > 0: gDestinationAccount.journal_list = re.split(', |,| ', jrn)
