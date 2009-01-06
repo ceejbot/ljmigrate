@@ -2,9 +2,13 @@
 # migrate to another site?
 # Set to True if you want to repost entries, False if not.
 migrate: True
+# You can restrict migration to just the entries that have one of the following
+# tags. Use commas to separate tags in the list.
+migrate-tag: example 1, example tag 2, third tag I want to copy
 # generate html for each entry? True or False
 generate-html: True
-migrate-community-posts-by-others: 0
+# If you're migrating a community, do you want to grab your own posts or everybody's?
+migrate-community-posts-by-others: False
 
 [proxy]
 # This section is optional. Use it if you use a proxy to do your web browsing.

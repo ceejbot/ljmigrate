@@ -3,8 +3,8 @@
 """
 Based on ljdump; original ljdump license & header in LICENCE.text.
 Extensive modifications by antennapedia.
-Version 1.4
-17 August 2008
+Version 1.4a
+6 January 2009
 
 BSD licence mumbo-jumbo to follow. By which I mean, do what you want.
 See README.text for documentation.
@@ -31,14 +31,14 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.4 080817a Sun Aug 17 20:27:00 PDT 2008'
+__version__ = '1.5 090106b Tue Jan  6 15:32:52 PST 2009'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
 configpath = "ljmigrate.cfg"
 
 # hackity hack
-global gSourceAccount, gDestinationAccount, gMigrate, gGenerateHtml
+global gSourceAccount, gDestinationAccount, gMigrate, gGenerateHtml, gMigrationTags
 userPictHash = {}
 
 # lj's time format: 2004-08-11 13:38:00
@@ -443,7 +443,7 @@ def exception(message, exc):
 
 def fetchConfig():
 	# needs major refactoring. sigh.
-	global gSourceAccount, gDestinationAccount, gMigrate, gGenerateHtml, gMigrateOwnOnly
+	global gSourceAccount, gDestinationAccount, gMigrate, gGenerateHtml, gMigrateOwnOnly, gMigrationTags
 	try:
 		cfparser = ConfigParser.SafeConfigParser()
 	except StandardError, e:
@@ -500,6 +500,13 @@ def fetchConfig():
 		item = cfparser.get('settings', 'migrate-community-posts-by-others')
 		if item.lower() in ['true', 'yes', '1']:
 			gMigrateOwnOnly = 0
+	except ConfigParser.NoOptionError, e:
+		pass
+		
+	gMigrationTags = []
+	try:
+		item = cfparser.get('settings', 'migrate-tag')
+		if len(item) > 0: gMigrationTags = re.split(', |,| ', item)
 	except ConfigParser.NoOptionError, e:
 		pass
 
@@ -767,7 +774,7 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 		os.makedirs(gSourceAccount.journal)
 		log("Created subdirectory: %s" % gSourceAccount.journal)
 
-	global allEntries, errors, newentries  # HACK
+	global allEntries, errors, newentries, gMigrationTags  # HACK
 
 	allEntries = {}
 	errors = 0
@@ -816,6 +823,8 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 	if not entry_hash.has_key(gSourceAccount.journal):
 		entry_hash[gSourceAccount.journal] = {}
 		
+	considerTags = (gMigrationTags != None) and (len(gMigrationTags) > 0)
+		
 	while 1:
 		syncitems = gSourceAccount.getSyncItems(lastsync)
 		if len(syncitems) == 0:
@@ -838,6 +847,17 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 					else:
 						# we prepend the post with a slug indicating who posted originally
 						entry['event'] = (u'<p><b>Original poster: <i><a href="http://%s.%s/">%s</a></i></b><p>' % (entry['poster'],  gSourceAccount.site, entry['poster'])) + entry['event']
+				elif considerTags and migrate:
+					# This is a personal journal, but we're migrating only specific tags.
+					# See if this entry has at least one of the target tags.
+					migrate = 0
+					tagstring = entry['props'].get('taglist', '')
+					entrytags = re.split(', |,| ', tagstring)
+					for t in entrytags:
+						if t in gMigrationTags:
+							migrate = 1
+							break
+				# end migration decision	
 				
 				if migrate:
 					keepTrying = 5
