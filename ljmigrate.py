@@ -4,7 +4,7 @@
 Based on ljdump; original ljdump license & header in LICENCE.text.
 Extensive modifications by antennapedia.
 Version 1.5
-6 January 2009
+7 January 2009
 
 BSD licence mumbo-jumbo to follow. By which I mean, do what you want.
 See README.text for documentation.
@@ -33,14 +33,14 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.5 090107a Wed Jan  7 00:23:07 PST 2009'
+__version__ = '1.5 090107b Wed Jan  7 12:31:31 PST 2009'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
 configpath = "ljmigrate.cfg"
 
 # hackity hack
-global gSourceAccount, gDestinationAccount, gMigrate, gGenerateHtml, gMigrationTags
+global gSourceAccount, gDestinationAccount, gAllEntries, gMigrate, gGenerateHtml, gMigrationTags
 
 # lj's time format: 2004-08-11 13:38:00
 ljTimeFormat = '%Y-%m-%d %H:%M:%S'
@@ -211,7 +211,7 @@ class Account(object):
 		if len(e['events']) > 0:
 			return e['events'][0]
 		else:
-			log(e)
+			ljmLog(e)
 			return None
 		
 	def postEntry(self, entry):
@@ -343,7 +343,7 @@ class Account(object):
 	
 		
 	def fetchUserPics(self, dontFetchImageData=1):
-		log("Recording userpic keyword info for: %s" % self.user)
+		ljmLog("Recording userpic keyword info for: %s" % self.user)
 	
 		r = self.getUserPics()
 		userpics = {}
@@ -367,12 +367,11 @@ class Account(object):
 				if not os.path.exists(picfn):
 					doDownload = 1
 			else:
-				print "no key in self.userpictypes"
 				doDownload = 1
 			if dontFetchImageData: doDownload = 0 # but respect the flag
 			
 			if doDownload:
-				log(u'    Getting image data for keywords "%s"' % kwd.encode('ascii', 'replace'))
+				ljmLog(u'    Getting image data for keywords "%s"' % kwd.encode('ascii', 'replace'))
 				try:
 					r = urllib2.urlopen(userpics[p])
 					if r:
@@ -396,9 +395,13 @@ class Account(object):
 		
 	def readGroupMap(self):
 		if self.groupmap == None:
-			f = self.readMetadataFile('friendgroups.meta')
-			groupmap = pickle.load(f)
-			f.close()
+			try:
+				f = self.readMetadataFile('friendgroups.meta')
+				groupmap = pickle.load(f)
+				f.close()
+			except:
+				# just start fresh
+				groupmap = {}
 			self.groupmap = groupmap
 			
 	def readAllEntryFiles(self):
@@ -495,7 +498,7 @@ def canonicalizeFilename(input):
 #-------------------------------------------------------------------------------
 # logging utilities
 
-def log(message):
+def ljmLog(message):
 	try:
 		print message
 	except:
@@ -505,7 +508,7 @@ def log(message):
 	except:
 		pass
 
-def exception(message, exc):
+def ljmException(message, exc):
 	try:
 		print "ERROR:", message, str(exc)
 		traceback.print_exc(5)
@@ -517,6 +520,11 @@ def exception(message, exc):
 		gSourceAccount.runlog.write(text+"\n")
 	except:
 		pass
+		
+def endLogging():
+	ljmLog("Run ended normally: %s" % time.asctime())
+	gSourceAccount.runlog.close()
+
 
 #-------------------------------------------------------------------------------
 # configuration file parsing
@@ -675,16 +683,18 @@ class Entry(object):
 		if type(item) == types.UnicodeType:
 			return item
 		return unicode(item, 'utf-8', 'replace')
+		
+	def getProperties(self):
+		if hasattr(self, 'props') and type(self.props) == type({}):
+			return self.props
+		return {}
 
 	def emit(self, path, groupmap={}):
 		if not hasattr(self, 'itemid'):
-			log("No item ID found in entry. Skipping: %s" % entry)
+			ljmLog("No item ID found in entry. Skipping: %s" % entry)
 			return
 		
-		if hasattr(self, 'props'):
-			properties = self.props
-		else:
-			properties = {}
+		properties = self.getProperties()
 
 		if hasattr(self, 'subject'):
 			subject = self.getStringAttribute('subject')
@@ -705,18 +715,19 @@ class Entry(object):
 			picpath = gSourceAccount.userPictHash[kw].replace(self.journalname, '..')
 			result = result + u'<div id="picture_keyword" style="float:left; margin: 5px;"><img src="%s" alt="%s" title="%s" /></div>\n' % (picpath, kw, kw)
 		else:
-			result = result + u'<div id="picture_keyword"><b>Icon:</b> %s</div>\n' % (kw, )
+			result = result + u'<div id="picture_keyword"><b>Icon:</b> %s</div>\n' % (unicode(kw, 'utf-8', 'replace'), )
 
 		for tag in entryprops:
 			if self.__dict__.has_key(tag):
-				result = result + '<div id="%s"><b>%s:</b> %s</div>\n' % (tag, tag, getattr(self, tag))
+				attribute = unicode(getattr(self, tag), 'utf-8', 'replace')
+				result = result + '<div id="%s"><b>%s:</b> %s</div>\n' % (tag, tag, attribute)
 
 		if properties.has_key('current_mood'):
 			result = result + '<div id="current_mood"><b>Mood:</b> %s</div>\n' % (properties['current_mood'], )
 		if properties.has_key('current_music'):
 			result = result + '<div id="current_music"><b>Music:</b> %s</div>\n' % (unicode(properties['current_music'], 'utf-8', 'replace'), )
 		if properties.has_key('taglist'):
-			result = result + '<div id="taglist"><b>Tags:</b> %s</div>\n' % (properties['taglist'], )
+			result = result + '<div id="taglist"><b>Tags:</b> %s</div>\n' % (unicode(properties['taglist'], 'utf-8', 'replace'), )
 		
 		if hasattr(self, 'security'):
 			security = self.getStringAttribute('security')
@@ -736,7 +747,7 @@ class Entry(object):
 		if hasattr(self, 'event'):
 			result = result + '<br clear="left" />\n'
 			content = self.getStringAttribute('event')
-			if not self.props.has_key('opt_preformatted'):
+			if not properties.has_key('opt_preformatted'):
 				content = content.replace("\n", "<br />\n");
 			content = userpattern.sub(r'<b><a href="http://\1.%s/"><img src="http://stat.livejournal.com/img/userinfo.gif" alt="[info]" width="17" height="17" style="vertical-align: bottom; border: 0;" />\1</a></b>' % gSourceAccount.site, content)
 			content = commpattern.sub(r'<b><a href="http://community.%s/\1/"><img src="http://stat.livejournal.com/img/community.gif" alt="[info]" width="16" height="16" style="vertical-align: bottom; border: 0;" />\1</a></b>', content)
@@ -820,7 +831,7 @@ def recordEntryHash(entry_hash):
 	f.close()
 		
 def fetchItem(item):
-	global errors, allEntries, newentries
+	global errors, gAllEntries, newentries
 	entry = None
 	keepTrying = 3
 	while keepTrying:
@@ -831,29 +842,29 @@ def fetchItem(item):
 
 			entry = gSourceAccount.getOneEvent(itemid)
 			if not entry:
-				log("Source returned unexpected result when queried for item %s" % (item['item']))
+				ljmLog("Source returned unexpected result when queried for item %s" % (item['item']))
 				return None
 			writedump(gSourceAccount.journal, item['item'], 'entry', entry)
 			entry['event'] = convertBinary(entry['event'])
 
 			if gGenerateHtml:
 				eobj = Entry(entry, gSourceAccount.user, gSourceAccount.journal)
-				allEntries[itemid] = eobj
+				gAllEntries[itemid] = eobj
 			newentries += 1
 			keepTrying = 0
 
 		except socket.gaierror, e:
-			exception("Socket error. Double-check your account information, and your net connection.", e)
+			ljmException("Socket error. Double-check your account information, and your net connection.", e)
 			keepTrying = 0
 		except xmlrpclib.ProtocolError, e:
-			exception("recoverable; retrying:", e)
+			ljmException("recoverable; retrying:", e)
 			keepTrying = keepTrying - 1
 		except exceptions.KeyboardInterrupt, e:
 			keepTrying = 0
 			# TODO cleanup
 			sys.exit()
 		except exceptions.Exception, x:
-			exception("fetching item %s; retrying" % item['item'], x)
+			ljmException("fetching item %s; retrying" % item['item'], x)
 			errors += 1
 			keepTrying = 0
 	return entry
@@ -864,22 +875,21 @@ def fetchItem(item):
 def synchronizeJournals(migrate = 0, retryMigrate = 0):
 	""" This method is an embarrassment. Refactor to make it much smaller.
 	"""
-	log("Fetching journal entries for: %s" % gSourceAccount.journal)
+	ljmLog("Fetching journal entries for: %s" % gSourceAccount.journal)
 	if not os.path.exists(gSourceAccount.journal):
 		os.makedirs(gSourceAccount.journal)
-		log("Created subdirectory: %s" % gSourceAccount.journal)
+		ljmLog("Created subdirectory: %s" % gSourceAccount.journal)
 
-	global allEntries, errors, newentries, gMigrationTags  # HACK
+	global gAllEntries, errors, newentries, gMigrationTags  # HACK
 
-	allEntries = {}
+	gAllEntries = {}
 	errors = 0
 	migrationCount = 0
 	newentries = 0
-	newcomments = 0
 	commentsBy = 0
 
 	try:
-		log("recording friends")
+		ljmLog("recording friends")
 		frnds = gSourceAccount.getfriends()
 		f = gSourceAccount.openMetadataFile('friends.meta', 0)
 		pickle.dump(frnds, f)
@@ -888,7 +898,7 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 		pass
 
 	try:
-		log("recording custom friend groups")
+		ljmLog("recording custom friend groups")
 		grps = gSourceAccount.getfriendgroups()		
 		groupmap = {}
 		for g in grps.get('friendgroups'):
@@ -948,7 +958,7 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 			break
 		for item in syncitems:
 			if item['item'][0] == 'L':
-				log("Fetching journal entry %s (%s)" % (item['item'], item['action']))
+				ljmLog("Fetching journal entry %s (%s)" % (item['item'], item['action']))
 				entry = fetchItem(item)
 				if not entry: continue
 				
@@ -981,18 +991,18 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 					while keepTrying:
 						try:
 							if not entry_hash[gSourceAccount.journal].has_key(item['item'][2:]):
-								log("    migrating entry to %s" % gDestinationAccount.journal)
+								ljmLog("    migrating entry to %s" % gDestinationAccount.journal)
 								result = gDestinationAccount.postEntry(entry)
 								entry_hash[gSourceAccount.journal][item['item'][2:]] = result.get('itemid', -1)
 								recordEntryHash(entry_hash)
 								migrationCount += 1
 							elif item['action'] == 'update':
-								log("   updating migrated entry in %s" % gDestinationAccount.journal)
+								ljmLog("   updating migrated entry in %s" % gDestinationAccount.journal)
 								result = gDestinationAccount.editEntry(entry, entry_hash[gSourceAccount.journal][item['item'][2:]])
 								migrationCount += 1
 							keepTrying = 0
 						except socket.gaierror, e:
-							exception("Socket error. Double-check your account information, and your net connection.", e)
+							ljmException("Socket error. Double-check your account information, and your net connection.", e)
 							keepTrying = 0
 						except exceptions.KeyboardInterrupt, e:
 							# TODO cleanup
@@ -1003,7 +1013,7 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 							except:
 								code = e.faultCode
 							if code == 101:
-								log("Fault reported is: %s; retrying" % e.faultString)
+								ljmLog("Fault reported is: %s; retrying" % e.faultString)
 								keepTrying -= 1
 							elif code == 205:
 								# Client error: Unknown metadata: taglist
@@ -1013,16 +1023,16 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 									del entry['props'][badprop]
 									keepTrying -= 1
 								else:
-									log("Fault: %s; not retrying" % e.faultString)
+									ljmLog("Fault: %s; not retrying" % e.faultString)
 									keepTrying = 0
 							elif code == 302:
-								log("Fault: %s; something is badly out of sync." % e.faultString)
+								ljmLog("Fault: %s; something is badly out of sync." % e.faultString)
 								keepTrying = 0
 							else:
-								exception("Fault: "+e.faultString, e)
+								ljmException("Fault: "+e.faultString, e)
 								keepTrying = 0
 						except exceptions.Exception, x:
-							exception("reposting item: %s" % item['item'], x)
+							ljmException("reposting item: %s" % item['item'], x)
 							errors += 1
 							keepTrying = 0
 				# end if migrate
@@ -1037,12 +1047,50 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 			recordLastSync(lastsync, lastmaxid)
 
 	if migrationCount == 1:
-		log("One entry migrated or updated on destination.")
+		ljmLog("One entry migrated or updated on destination.")
 	else:
-		log("%d entries migrated or updated on destination." % (migrationCount, ))
+		ljmLog("%d entries migrated or updated on destination." % (migrationCount, ))
 	
 	recordEntryHash(entry_hash)
 	
+	lastmaxid, newcomments = fetchNewComments(lastmaxid, lastsync, 0)	
+	recordLastSync(lastsync, lastmaxid)
+		
+	if gGenerateHtml:
+		generateHTML(gSourceAccount)
+	
+	ljmLog("Local archive complete!")
+
+	if origlastsync:
+		ljmLog("%d new entries, %d new comments (since %s),  %d new comments by user" % (newentries, newcomments, origlastsync, commentsBy))
+	else:
+		ljmLog("%d entries, %d comments, %d comments by user" % (newentries, newcomments, commentsBy))
+	if errors > 0:
+		ljmLog("%d errors" % errors)
+# end synchronizeJournals
+
+def generateHTML(gSourceAccount, forceIndex=0):
+	global gAllEntries
+	ljmLog("Now generating a simple html version of your posts + comments.")
+	htmlpath = os.path.join(gSourceAccount.journal, 'html')
+	if not os.path.exists(htmlpath):
+		os.makedirs(htmlpath)
+	
+	ids = gAllEntries.keys()
+	ids.sort(lambda x,y: int(x)-int(y))
+	
+	for id in ids:
+		try:
+			gAllEntries[id].emit(htmlpath, gSourceAccount.groupmap);
+		except StandardError, e:
+			ljmException("skipping building html for post %s because of error:" % id, e)
+	try:
+		emitIndex(htmlpath, forceIndex)
+	except StandardError, e:
+		ljmException("skipping html index generation because of error:" % id, e)
+		
+def fetchNewComments(lastmaxid, lastsync, refreshall=0):
+	global gAllEntries
 	try:
 		f = gSourceAccount.readMetadataFile('comment.meta', 0)
 		metacache = pickle.load(f)
@@ -1057,7 +1105,9 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 	except:
 		usermap = {}
 		
-	log("Fetching journal comments for: %s" % gSourceAccount.journal)
+	ljmLog("Fetching journal comments for: %s" % gSourceAccount.journal)
+
+	newcomments = 0
 	
 	maxid = lastmaxid
 	while 1:
@@ -1077,8 +1127,6 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 		if maxid >= int(meta.getElementsByTagName("maxid")[0].firstChild.nodeValue):
 			break
 	
-	recordLastSync(lastsync, lastmaxid)
-
 	f = gSourceAccount.openMetadataFile('comment.meta', 0)
 	pickle.dump(metacache, f)
 	f.close()
@@ -1089,7 +1137,6 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 	
 	newmaxid = maxid
 	maxid = lastmaxid
-	
 	if gSourceAccount.user == gSourceAccount.journal:
 		# hackity. haven't yet figured out how to get community comments
 		while 1:
@@ -1105,7 +1152,7 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 					'subject': gettext(c.getElementsByTagName("subject")),
 					'date': gettext(c.getElementsByTagName("date")),
 					'body': gettext(c.getElementsByTagName("body")),
-					'state': metacache[id]['state'],
+					'state': metacache.get(id, {}).get('state', ''),
 				}
 				if usermap.has_key(c.getAttribute("posterid")):
 					comment["user"] = usermap[c.getAttribute("posterid")]
@@ -1124,10 +1171,10 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 						found = 1
 						break
 
-				if not found:
-					if allEntries.has_key(jitemid):
+				if refreshall or not found:
+					if gAllEntries.has_key(jitemid):
 						cmt = Comment(comment)
-						allEntries[jitemid].addComment(cmt)
+						gAllEntries[jitemid].addComment(cmt)
 					entry.documentElement.appendChild(createxml(entry, "comment", comment))
 					
 					f = codecs.open(os.path.join(path, "comments.xml"), "w", "UTF-8")
@@ -1140,70 +1187,49 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 					maxid = id
 			if maxid >= newmaxid:
 				break
-	
-	lastmaxid = maxid
-	
-	recordLastSync(lastsync, lastmaxid)
-		
-	if gGenerateHtml:
-		generateHTML(gSourceAccount, allEntries)
-	
-	log("Local archive complete!")
 
-	if origlastsync:
-		log("%d new entries, %d new comments (since %s),  %d new comments by user" % (newentries, newcomments, origlastsync, commentsBy))
-	else:
-		log("%d entries, %d comments, %d comments by user" % (newentries, newcomments, commentsBy))
-	if errors > 0:
-		log("%d errors" % errors)
-# end synchronizeJournals
+	return (maxid, newcomments)
+	# end fetch comments
 
-def generateHTML(gSourceAccount, allEntries, forceIndex=0):
-	log("Now generating a simple html version of your posts + comments.")
-	htmlpath = os.path.join(gSourceAccount.journal, 'html')
-	if not os.path.exists(htmlpath):
-		os.makedirs(htmlpath)
-	
-	ids = allEntries.keys()
-	ids.sort(lambda x,y: int(x)-int(y))
-	
-	for id in ids:
-		try:
-			allEntries[id].emit(htmlpath, gSourceAccount.groupmap);
-		except StandardError, e:
-			exception("skipping building html for post %s because of error:" % id, e)
-	try:
-		emitIndex(htmlpath, forceIndex)
-	except StandardError, e:
-		exception("skipping html index generation because of error:" % id, e)
 	
 
 #-------------------------------------------------------------------------------
 
 def main(options):
+	global gAllEntries
 	fetchConfig()
 
+	firstRunForAccount = 0
 	if not os.path.exists(gSourceAccount.user):
 		os.makedirs(gSourceAccount.user)
 		print "Created subdirectory: %s" % gSourceAccount.user
-		
+		firstRunForAccount = 1
+	
 	path = gSourceAccount.metapath()
 	if not os.path.exists(path):
 		os.makedirs(path)
 	gSourceAccount.runlog = codecs.open(os.path.join(path, "ljmigrate.log"), 'a', 'utf-8', 'replace')
-	log("----------\nljmigrate run started: %s" % time.asctime())
-	log("Version: %s" % __version__)
+	ljmLog("----------\nljmigrate run started: %s" % time.asctime())
+	ljmLog("Version: %s" % __version__)
 	
 	dontFetchImageData = not options.userPicsOnly and options.skipUserPics
 	
 	gSourceAccount.makeSession()
-	gSourceAccount.fetchUserPics(dontFetchImageData)
-	
-	if options.userPicsOnly:
-		log("Run ended normally: %s" % time.asctime())
-		gSourceAccount.runlog.close()
+
+	if options.commentsOnly and not firstRunForAccount:
+		# TODO note repetition with regenhtml option handling; refactor
+		gAllEntries = gSourceAccount.readAllEntryFiles()
+		fetchNewComments(0, '', 1)
+		gSourceAccount.readGroupMap()
+		generateHTML(gSourceAccount, 1)
+		endLogging()
 		return
 	
+	gSourceAccount.fetchUserPics(dontFetchImageData)
+	if options.userPicsOnly and not firstRunForAccount:
+		endLogging()
+		return
+		
 	if not options.commsOnly:
 		synchronizeJournals(gMigrate, options.retryMigrate)
 	
@@ -1223,11 +1249,10 @@ def main(options):
 			
 	if options.regenhtml:
 		gSourceAccount.readGroupMap()
-		allEntries = gSourceAccount.readAllEntryFiles()
-		generateHTML(gSourceAccount, allEntries, 1)
+		gAllEntries = gSourceAccount.readAllEntryFiles()
+		generateHTML(gSourceAccount, 1)
 	
-	log("Run ended normally: %s" % time.asctime())
-	gSourceAccount.runlog.close()
+	endLogging()
 	
 	
 		
@@ -1317,6 +1342,8 @@ if __name__ == '__main__':
 		help="just back up user pics")
 	parser.add_option('-g', '--regenerate-html', action='store_true', dest='regenhtml', default=0,
 		help="regenerate all the html files")
+	parser.add_option('--comments-only', action='store_true', dest='commentsOnly', default=0,
+		help="re-fetch all comments, skipping posts and other data")
 
 	(options, args) = parser.parse_args()
 
