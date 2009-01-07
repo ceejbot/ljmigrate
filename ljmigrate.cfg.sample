@@ -12,8 +12,9 @@ migrate-community-posts-by-others: False
 
 [proxy]
 # This section is optional. Use it if you use a proxy to do your web browsing.
-host: localhost
-port: 8000
+# Leave it commented out if you don't.
+#host: localhost
+#port: 8000
 
 [source]
 # The host of the journal you're backing up.

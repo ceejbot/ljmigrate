@@ -33,7 +33,7 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.5 090106c Tue Jan  6 18:30:59 PST 2009'
+__version__ = '1.5 090107a Wed Jan  7 00:23:07 PST 2009'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
