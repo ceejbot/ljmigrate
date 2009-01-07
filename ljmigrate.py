@@ -3,7 +3,7 @@
 """
 Based on ljdump; original ljdump license & header in LICENCE.text.
 Extensive modifications by antennapedia.
-Version 1.4a
+Version 1.5
 6 January 2009
 
 BSD licence mumbo-jumbo to follow. By which I mean, do what you want.
@@ -12,8 +12,10 @@ See README.text for documentation.
 
 import codecs
 import exceptions
+import fnmatch
 import httplib
 import imghdr
+import math
 import md5
 from optparse import OptionParser
 import os
@@ -31,7 +33,7 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.5 090106b Tue Jan  6 15:32:52 PST 2009'
+__version__ = '1.5 090106c Tue Jan  6 18:30:59 PST 2009'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
@@ -39,7 +41,6 @@ configpath = "ljmigrate.cfg"
 
 # hackity hack
 global gSourceAccount, gDestinationAccount, gMigrate, gGenerateHtml, gMigrationTags
-userPictHash = {}
 
 # lj's time format: 2004-08-11 13:38:00
 ljTimeFormat = '%Y-%m-%d %H:%M:%S'
@@ -110,6 +111,8 @@ class Account(object):
 		self.session = ""
 		self.journal = user
 		self.journal_list = []
+		self.groupmap = None
+		self.readUserPicInfo()
 	
 	def metapath(self):
 		return os.path.join(self.journal, "metadata")
@@ -294,6 +297,50 @@ class Account(object):
 		params = self.doChallenge(params)
 		result = self.server_proxy.LJ.XMLRPC.editevent(params)
 		return result
+	
+	def getfriendgroups(self):
+		params = {
+			'username': self.user,
+			'ver': 1,
+			'lineendings': 'unix',
+		}
+		
+		params = self.doChallenge(params)
+		result = self.server_proxy.LJ.XMLRPC.getfriendgroups(params)
+		return result
+		
+	def getfriends(self):
+		params = {
+			'username': self.user,
+			'ver': 1,
+			'lineendings': 'unix',
+		}
+		
+		params = self.doChallenge(params)
+		result = self.server_proxy.LJ.XMLRPC.getfriends(params)
+		return result
+	
+	def readUserPicInfo(self):
+		self.userpictypes = {}
+		self.userPictHash = {}
+		try:
+			path = os.path.join(self.user, "userpics")
+			fp = self.readMetadataFile("userpics.xml")
+			string = fp.read()
+			fp.close()
+			string = string.encode("utf-8", "replace")
+			iconXML = xml.dom.minidom.parseString(string)
+			for p in iconXML.getElementsByTagName("userpic"):
+				key = p.getAttribute('keyword')
+				type = p.getAttribute('type')
+				self.userpictypes[key] = type
+				picfn = os.path.join(path, "%s.%s" % (canonicalizeFilename(key), type))
+				self.userPictHash[key] = picfn
+		except Exception, e:
+			# eat the error and just get them all fresh
+			# print e
+			pass
+	
 		
 	def fetchUserPics(self, dontFetchImageData=1):
 		log("Recording userpic keyword info for: %s" % self.user)
@@ -302,22 +349,7 @@ class Account(object):
 		userpics = {}
 		for i in range(0, len(r['pickws'])):
 			userpics[str(r['pickws'][i])] = r['pickwurls'][i]
-		#userpics = dict(zip(r['pickws'], r['pickwurls']))
 		userpics['default'] = r['defaultpicurl']
-
-		try:
-			fp = self.readMetadataFile("userpics.xml")
-			string = fp.read()
-			string = string.encode("utf-8", "replace")
-			iconXML = xml.dom.minidom.parseString(string)
-			userpictypes = {}
-			for p in iconXML.getElementsByTagName("userpic"):
-				key = p.getAttribute('keyword')
-				type = p.getAttribute('type')
-				userpictypes[key] = type
-		except Exception, e:
-			# eat the error and just get them all fresh
-			userpictypes = {}
 
 		path = os.path.join(self.user, "userpics")
 		if not os.path.exists(path):
@@ -330,11 +362,12 @@ class Account(object):
 			kwd = p.decode('utf-8', 'replace')
 			
 			doDownload = 0
-			if userpictypes.has_key(kwd):
-				picfn = os.path.join(path, "%s.%s" % (canonicalizeFilename(kwd), userpictypes[kwd]))
+			if self.userpictypes.has_key(kwd):
+				picfn = os.path.join(path, "%s.%s" % (canonicalizeFilename(kwd), self.userpictypes[kwd]))
 				if not os.path.exists(picfn):
 					doDownload = 1
 			else:
+				print "no key in self.userpictypes"
 				doDownload = 1
 			if dontFetchImageData: doDownload = 0 # but respect the flag
 			
@@ -345,23 +378,70 @@ class Account(object):
 					if r:
 						data = r.read()
 						type = imghdr.what(r, data)
-						userpictypes[p] = type
+						self.userpictypes[p] = type
 						if p == "*":
 							picfn = os.path.join(path, "default.%s" % type)
 						else:
 							picfn = os.path.join(path, "%s.%s" % (canonicalizeFilename(p), type))
-						userPictHash[kwd] = unicode(picfn, 'utf-8', 'replace')
+						self.userPictHash[kwd] = unicode(picfn, 'utf-8', 'replace')
 						picfp = open(picfn, 'w')
 						picfp.write(data)
 						picfp.close()
 				except:
 					pass
-			f.write(u'<userpic keyword="%s" url="%s" type="%s" />\n' % (saxutils.escape(kwd), userpics[p], userpictypes.get(p, "")))
+			f.write(u'<userpic keyword="%s" url="%s" type="%s" />\n' % (saxutils.escape(kwd), userpics[p], self.userpictypes.get(p, "")))
 
 		f.write("</userpics>\n")
 		f.close()
+		
+	def readGroupMap(self):
+		if self.groupmap == None:
+			f = self.readMetadataFile('friendgroups.meta')
+			groupmap = pickle.load(f)
+			f.close()
+			self.groupmap = groupmap
+			
+	def readAllEntryFiles(self):
+		from StringIO import StringIO
+		result = {}
+		inputdir = self.journal
+
+		for root, dirs, files in os.walk(inputdir):
+			if '.svn' in dirs: dirs.remove('.svn')	
+			if '.svn' in dirs: dirs.remove('html')	
+			if '.svn' in dirs: dirs.remove('metadata')	
+			if '.svn' in dirs: dirs.remove('userpics')	
+			yfiles = fnmatch.filter(files, 'entry.xml')
+		
+			for fname in yfiles:
+				path = os.path.join(root, fname)
+				entryxml = xml.dom.minidom.parse(path)
+				for e in entryxml.getElementsByTagName("event"):
+					test = e.getElementsByTagName('itemid')
+					if len(test) == 0: continue
+					entrydict = nodeToDict(e)
+					eobj = Entry(entrydict, self.user, self.journal)
+					result[entrydict['itemid']] = eobj
+		return result
 
 ###
+
+def nodeToDict(node):
+	result = {}
+	for child in node.childNodes:
+		if child.nodeType == node.TEXT_NODE:
+			continue
+		result[child.tagName] = nodeToDict(child)	
+	if len(result.keys()) == 0:
+		return getTextFromNode(node.childNodes)
+	return result
+	
+def getTextFromNode(nodelist):
+	rc = ""
+	for node in nodelist:
+		if node.nodeType == node.TEXT_NODE:
+			rc = rc + node.data
+	return rc
 
 def dumpelement(f, name, e):
 	f.write("<%s>\n" % name)
@@ -406,7 +486,7 @@ def gettext(e):
 	if len(e) == 0:
 		return ""
 	return e[0].firstChild.nodeValue
-	
+
 def canonicalizeFilename(input):
 	result = input.replace(os.sep, "|")
 	result = result.replace(' ', '_')
@@ -596,7 +676,7 @@ class Entry(object):
 			return item
 		return unicode(item, 'utf-8', 'replace')
 
-	def emit(self, path):
+	def emit(self, path, groupmap={}):
 		if not hasattr(self, 'itemid'):
 			log("No item ID found in entry. Skipping: %s" % entry)
 			return
@@ -621,8 +701,8 @@ class Entry(object):
 				kw = kw.data.decode('utf-8', 'replace')
 		else:
 			kw = 'default'
-		if userPictHash.has_key(kw):
-			picpath = userPictHash[kw].replace(self.journalname, '..')
+		if gSourceAccount.userPictHash.has_key(kw):
+			picpath = gSourceAccount.userPictHash[kw].replace(self.journalname, '..')
 			result = result + u'<div id="picture_keyword" style="float:left; margin: 5px;"><img src="%s" alt="%s" title="%s" /></div>\n' % (picpath, kw, kw)
 		else:
 			result = result + u'<div id="picture_keyword"><b>Icon:</b> %s</div>\n' % (kw, )
@@ -634,10 +714,25 @@ class Entry(object):
 		if properties.has_key('current_mood'):
 			result = result + '<div id="current_mood"><b>Mood:</b> %s</div>\n' % (properties['current_mood'], )
 		if properties.has_key('current_music'):
-			result = result + '<div id="current_music"><b>Music:</b> %s</div>\n' % (properties['current_music'], )
+			result = result + '<div id="current_music"><b>Music:</b> %s</div>\n' % (unicode(properties['current_music'], 'utf-8', 'replace'), )
 		if properties.has_key('taglist'):
 			result = result + '<div id="taglist"><b>Tags:</b> %s</div>\n' % (properties['taglist'], )
 		
+		if hasattr(self, 'security'):
+			security = self.getStringAttribute('security')
+			if security == 'usemask':
+				filter = int(self.getStringAttribute('allowmask'))
+				result = result + '<div id="filter">'
+				if filter == 1:
+					result = result + "<b>Friends-locked</b><br />\n"
+				else:
+					fgrp = groupmap.get(filter, None)
+					if fgrp:
+						result = result + "<b>Filtered:</b> %s<br />\n" % (fgrp.get('name', 'unnamed group'), )
+					else:
+						result = result + "<b>Filtered:</b> friend group deleted; id was %d<br />\n" % filter
+				result = result + '</div>'
+			
 		if hasattr(self, 'event'):
 			result = result + '<br clear="left" />\n'
 			content = self.getStringAttribute('event')
@@ -666,9 +761,9 @@ class Entry(object):
 		idxtext = '+ %s: <a href="%s">%s</a><br />' % (self.__dict__.get('eventtime', None), fname, subject)
 		indexEntries.append(idxtext)
 
-def emitIndex(htmlpath, firstTime):
+def emitIndex(htmlpath, forceIndex=0):
 	fpath = os.path.join(htmlpath, 'index.html')
-	if os.path.exists(fpath):
+	if os.path.exists(fpath) and not forceIndex:
 		return # bailing for now, to avoid the data loss bug
 	result = tmpl_start_nojour % ("Journal Index", )
 	result = result + '\n'.join(indexEntries)
@@ -782,6 +877,28 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 	newentries = 0
 	newcomments = 0
 	commentsBy = 0
+
+	try:
+		log("recording friends")
+		frnds = gSourceAccount.getfriends()
+		f = gSourceAccount.openMetadataFile('friends.meta', 0)
+		pickle.dump(frnds, f)
+		f.close()
+	except:
+		pass
+
+	try:
+		log("recording custom friend groups")
+		grps = gSourceAccount.getfriendgroups()		
+		groupmap = {}
+		for g in grps.get('friendgroups'):
+			groupmap[int(math.pow(2, int(g['id'])))] = g
+		f = gSourceAccount.openMetadataFile('friendgroups.meta', 0)
+		pickle.dump(groupmap, f)
+		f.close()
+		gSourceAccount.groupmap = groupmap
+	except:
+		pass
 	
 	lastsync = ""
 	lastmaxid = 0
@@ -925,7 +1042,7 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 		log("%d entries migrated or updated on destination." % (migrationCount, ))
 	
 	recordEntryHash(entry_hash)
-
+	
 	try:
 		f = gSourceAccount.readMetadataFile('comment.meta', 0)
 		metacache = pickle.load(f)
@@ -1029,26 +1146,7 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 	recordLastSync(lastsync, lastmaxid)
 		
 	if gGenerateHtml:
-		log("Now generating a simple html version of your posts + comments.")
-		htmlpath = os.path.join(gSourceAccount.journal, 'html')
-		if not os.path.exists(htmlpath):
-			firstTime = 1
-			os.makedirs(htmlpath)
-		else:
-			firstTime = 0
-		
-		ids = allEntries.keys()
-		ids.sort(lambda x,y: int(x)-int(y))
-		
-		for id in ids:
-			try:
-				allEntries[id].emit(htmlpath);
-			except StandardError, e:
-				exception("skipping building html for post %s because of error:" % id, e)
-		try:
-			emitIndex(htmlpath, firstTime)
-		except StandardError, e:
-			exception("skipping html index generation because of error:" % id, e)
+		generateHTML(gSourceAccount, allEntries)
 	
 	log("Local archive complete!")
 
@@ -1058,10 +1156,31 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 		log("%d entries, %d comments, %d comments by user" % (newentries, newcomments, commentsBy))
 	if errors > 0:
 		log("%d errors" % errors)
+# end synchronizeJournals
+
+def generateHTML(gSourceAccount, allEntries, forceIndex=0):
+	log("Now generating a simple html version of your posts + comments.")
+	htmlpath = os.path.join(gSourceAccount.journal, 'html')
+	if not os.path.exists(htmlpath):
+		os.makedirs(htmlpath)
+	
+	ids = allEntries.keys()
+	ids.sort(lambda x,y: int(x)-int(y))
+	
+	for id in ids:
+		try:
+			allEntries[id].emit(htmlpath, gSourceAccount.groupmap);
+		except StandardError, e:
+			exception("skipping building html for post %s because of error:" % id, e)
+	try:
+		emitIndex(htmlpath, forceIndex)
+	except StandardError, e:
+		exception("skipping html index generation because of error:" % id, e)
+	
 
 #-------------------------------------------------------------------------------
 
-def main(retryMigrate = 0, communitiesOnly = 0, skipUserPics = 0, userPicsOnly = 0):
+def main(options):
 	fetchConfig()
 
 	if not os.path.exists(gSourceAccount.user):
@@ -1075,18 +1194,18 @@ def main(retryMigrate = 0, communitiesOnly = 0, skipUserPics = 0, userPicsOnly =
 	log("----------\nljmigrate run started: %s" % time.asctime())
 	log("Version: %s" % __version__)
 	
-	dontFetchImageData = not userPicsOnly and skipUserPics
+	dontFetchImageData = not options.userPicsOnly and options.skipUserPics
 	
 	gSourceAccount.makeSession()
 	gSourceAccount.fetchUserPics(dontFetchImageData)
 	
-	if userPicsOnly:
+	if options.userPicsOnly:
 		log("Run ended normally: %s" % time.asctime())
 		gSourceAccount.runlog.close()
 		return
 	
-	if not communitiesOnly:
-		synchronizeJournals(gMigrate, retryMigrate)
+	if not options.commsOnly:
+		synchronizeJournals(gMigrate, options.retryMigrate)
 	
 	if gDestinationAccount:
 		accounts = map(None, gSourceAccount.journal_list, gDestinationAccount.journal_list)
@@ -1094,13 +1213,18 @@ def main(retryMigrate = 0, communitiesOnly = 0, skipUserPics = 0, userPicsOnly =
 			gSourceAccount.journal = pair[0]
 			if pair[1]:
 				gDestinationAccount.journal = pair[1]
-				synchronizeJournals(1, retryMigrate)
+				synchronizeJournals(1, options.retryMigrate)
 			else:
-				synchronizeJournals(0, retryMigrate)
+				synchronizeJournals(0, options.retryMigrate)
 	else:
 		for comm in gSourceAccount.journal_list:
 			gSourceAccount.journal = comm
-			synchronizeJournals(0, retryMigrate)
+			synchronizeJournals(0, options.retryMigrate)
+			
+	if options.regenhtml:
+		gSourceAccount.readGroupMap()
+		allEntries = gSourceAccount.readAllEntryFiles()
+		generateHTML(gSourceAccount, allEntries, 1)
 	
 	log("Run ended normally: %s" % time.asctime())
 	gSourceAccount.runlog.close()
@@ -1191,10 +1315,12 @@ if __name__ == '__main__':
 		help="delete ALL posts in the specified account; see README for details")
 	parser.add_option('-p', '--user-pics-only', action='store_true', dest='userPicsOnly', default=0,
 		help="just back up user pics")
+	parser.add_option('-g', '--regenerate-html', action='store_true', dest='regenhtml', default=0,
+		help="regenerate all the html files")
 
 	(options, args) = parser.parse_args()
 
 	if options.nuke:
 		nukeall()
 	else:
-		main(options.retryMigrate, options.commsOnly, options.skipUserPics, options.userPicsOnly)
+		main(options)
