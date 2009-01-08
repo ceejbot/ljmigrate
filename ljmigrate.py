@@ -33,7 +33,7 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.5 090107b Wed Jan  7 12:31:31 PST 2009'
+__version__ = '1.5 090107c Wed Jan  7 17:20:49 PST 2009'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
@@ -446,6 +446,8 @@ def getTextFromNode(nodelist):
 			rc = rc + node.data
 	return rc
 
+### inherited functions from ljdump; TODO re-examine
+
 def dumpelement(f, name, e):
 	f.write("<%s>\n" % name)
 	for k in e.keys():
@@ -719,7 +721,7 @@ class Entry(object):
 
 		for tag in entryprops:
 			if self.__dict__.has_key(tag):
-				attribute = unicode(getattr(self, tag), 'utf-8', 'replace')
+				attribute = self.getStringAttribute(tag)
 				result = result + '<div id="%s"><b>%s:</b> %s</div>\n' % (tag, tag, attribute)
 
 		if properties.has_key('current_mood'):
