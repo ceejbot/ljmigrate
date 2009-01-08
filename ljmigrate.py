@@ -538,7 +538,7 @@ def fetchConfig():
 		cfparser = ConfigParser.ConfigParser()
 		
 	try:
-		cfparser.readfp(open(configpath))
+		cfparser.readfp(open(options.configFile))
 	except StandardError, e:
 		print "Problem reading config file: %s" % str(e)
 		sys.exit()
@@ -1256,14 +1256,14 @@ def main(options):
 	
 	
 		
-def nukeall():
+def nukeall(options):
 	# note copy and pasted code blocks: refactor
 	try:
 		cfparser = ConfigParser.SafeConfigParser()
 	except StandardError, e:
 		cfparser = ConfigParser.ConfigParser()
 	try:
-		cfparser.readfp(open(configpath))
+		cfparser.readfp(open(options.configFile))
 	except StandardError, e:
 		print "Problem reading config file: %s" % str(e)
 		sys.exit()
@@ -1344,10 +1344,12 @@ if __name__ == '__main__':
 		help="regenerate all the html files")
 	parser.add_option('--comments-only', action='store_true', dest='commentsOnly', default=0,
 		help="re-fetch all comments, skipping posts and other data")
+	parser.add_option('-f', '--config-file', action='store', type='string', dest='configFile', default=configpath,
+		help="specify location of config file") 
 
 	(options, args) = parser.parse_args()
 
 	if options.nuke:
-		nukeall()
+		nukeall(options)
 	else:
 		main(options)
