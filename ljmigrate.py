@@ -33,7 +33,7 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.5 090109a Fri Jan  9 08:51:34 PST 2009'
+__version__ = '1.5 090109b Fri Jan  9 09:38:31 PST 2009'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
@@ -715,16 +715,14 @@ class Entry(object):
 		result = doctype + tmpl_start_jour % (self.journalname, subject)
 
 		if properties.has_key('picture_keyword'):
-			kw = properties['picture_keyword']
-			if type(kw) == types.InstanceType:
-				kw = kw.data.decode('utf-8', 'replace')
+			kw = self.getStringProperty('picture_keyword')
 		else:
 			kw = 'default'
 		if gSourceAccount.userPictHash.has_key(kw):
 			picpath = gSourceAccount.userPictHash[kw].replace(self.journalname, '..')
 			result = result + u'<div id="picture_keyword" style="float:left; margin: 5px;"><img src="%s" alt="%s" title="%s" /></div>\n' % (picpath, kw, kw)
 		else:
-			result = result + u'<div id="picture_keyword"><b>Icon:</b> %s</div>\n' % (unicode(kw, 'utf-8', 'replace'), )
+			result = result + u'<div id="picture_keyword"><b>Icon:</b> %s</div>\n' % (kw, )
 
 		for tag in entryprops:
 			if self.__dict__.has_key(tag):
@@ -1043,6 +1041,8 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 							ljmException("reposting item: %s" % item['item'], x)
 							errors += 1
 							keepTrying = 0
+						# end try
+					# end while
 				# end if migrate
 					
 			elif item['item'].startswith('C-'):
