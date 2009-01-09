@@ -33,7 +33,7 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.5 090107c Wed Jan  7 17:20:49 PST 2009'
+__version__ = '1.5 090109a Fri Jan  9 08:51:34 PST 2009'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
@@ -690,6 +690,13 @@ class Entry(object):
 		if hasattr(self, 'props') and type(self.props) == type({}):
 			return self.props
 		return {}
+	
+	def getStringProperty(self, tag):
+		properties = self.getProperties()
+		prop = properties.get(tag, u'')
+		if type(prop) == type(u''):
+			return prop
+		return unicode(prop, 'utf-8', 'replace')
 
 	def emit(self, path, groupmap={}):
 		if not hasattr(self, 'itemid'):
@@ -725,11 +732,11 @@ class Entry(object):
 				result = result + '<div id="%s"><b>%s:</b> %s</div>\n' % (tag, tag, attribute)
 
 		if properties.has_key('current_mood'):
-			result = result + '<div id="current_mood"><b>Mood:</b> %s</div>\n' % (properties['current_mood'], )
+			result = result + '<div id="current_mood"><b>Mood:</b> %s</div>\n' % (self.getStringProperty('current_mood'), )
 		if properties.has_key('current_music'):
-			result = result + '<div id="current_music"><b>Music:</b> %s</div>\n' % (unicode(properties['current_music'], 'utf-8', 'replace'), )
+			result = result + '<div id="current_music"><b>Music:</b> %s</div>\n' % (self.getStringProperty('current_music'), )
 		if properties.has_key('taglist'):
-			result = result + '<div id="taglist"><b>Tags:</b> %s</div>\n' % (unicode(properties['taglist'], 'utf-8', 'replace'), )
+			result = result + '<div id="taglist"><b>Tags:</b> %s</div>\n' % (self.getStringProperty('taglist'), )
 		
 		if hasattr(self, 'security'):
 			security = self.getStringAttribute('security')
@@ -849,9 +856,8 @@ def fetchItem(item):
 			writedump(gSourceAccount.journal, item['item'], 'entry', entry)
 			entry['event'] = convertBinary(entry['event'])
 
-			if gGenerateHtml:
-				eobj = Entry(entry, gSourceAccount.user, gSourceAccount.journal)
-				gAllEntries[itemid] = eobj
+			eobj = Entry(entry, gSourceAccount.user, gSourceAccount.journal)
+			gAllEntries[itemid] = eobj
 			newentries += 1
 			keepTrying = 0
 
@@ -1057,11 +1063,11 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 	
 	lastmaxid, newcomments = fetchNewComments(lastmaxid, lastsync, 0)	
 	recordLastSync(lastsync, lastmaxid)
-		
-	if gGenerateHtml:
-		generateHTML(gSourceAccount)
 	
-	ljmLog("Local archive complete!")
+	ljmLog("Local xml archive complete.")
+
+	if gGenerateHtml and not options.regenhtml:
+		generateHTML(gSourceAccount)
 
 	if origlastsync:
 		ljmLog("%d new entries, %d new comments (since %s),  %d new comments by user" % (newentries, newcomments, origlastsync, commentsBy))
