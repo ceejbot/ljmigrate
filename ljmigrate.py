@@ -972,29 +972,29 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 				
 				# pulling this out into stages to make the logic clearer
 				# only migrate if we have the option set, if we have a destination account, AND we have an entry to move
-				migrate = (migrate and gDestinationAccount and entry)
+				migrateThis = (migrate and gDestinationAccount and (entry != None))
 				# if the entry has no poster key, it's a personal journal. always migrate
 				# if the option to migrate only our own posts is set, we need to consider the poster...
 				if entry and entry.has_key('poster'):
 					if gMigrateOwnOnly:
 						# and set the flag only if we're the original poster
-						migrate = migrate and (entry['poster'] == gSourceAccount.user)
+						migrateThis = migrateThis and (entry['poster'] == gSourceAccount.user)
 					else:
 						# we prepend the post with a slug indicating who posted originally
 						entry['event'] = (u'<p><b>Original poster: <i><a href="http://%s.%s/">%s</a></i></b><p>' % (entry['poster'],  gSourceAccount.site, entry['poster'])) + entry['event']
 				elif considerTags and migrate:
 					# This is a personal journal, but we're migrating only specific tags.
 					# See if this entry has at least one of the target tags.
-					migrate = 0
+					migrateThis = 0
 					tagstring = entry['props'].get('taglist', '')
 					entrytags = re.split(', |,| ', tagstring)
 					for t in entrytags:
 						if t in gMigrationTags:
-							migrate = 1
+							migrateThis = 1
 							break
-				# end migration decision	
+				# end migration decision
 				
-				if migrate:
+				if migrateThis:
 					keepTrying = 5
 					while keepTrying:
 						try:
