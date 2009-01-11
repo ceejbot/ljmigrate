@@ -1116,10 +1116,14 @@ def fetchNewComments(lastmaxid, lastsync, refreshall=0):
 	ljmLog("Fetching journal comments for: %s" % gSourceAccount.journal)
 
 	newcomments = 0
+
+	commenturl = gSourceAccount.host+"/export_comments.bml?get=comment_meta&startid=%d"
+	if gSourceAccount.user != gSourceAccount.journal:
+		commenturl = commenturl + "&authas=%s" % gSourceAccount.journal
 	
 	maxid = lastmaxid
 	while 1:
-		r = urllib2.urlopen(urllib2.Request(gSourceAccount.host+"/export_comments.bml?get=comment_meta&startid=%d" % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
+		r = urllib2.urlopen(urllib2.Request(commenturl % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
 		meta = xml.dom.minidom.parse(r)
 		r.close()
 		for c in meta.getElementsByTagName("comment"):
@@ -1145,56 +1149,59 @@ def fetchNewComments(lastmaxid, lastsync, refreshall=0):
 	
 	newmaxid = maxid
 	maxid = lastmaxid
-	if gSourceAccount.user == gSourceAccount.journal:
-		# hackity. haven't yet figured out how to get community comments
-		while 1:
-			r = urllib2.urlopen(urllib2.Request(gSourceAccount.host+"/export_comments.bml?get=comment_body&startid=%d" % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
-			meta = xml.dom.minidom.parse(r)
-			r.close()
-			for c in meta.getElementsByTagName("comment"):
-				id = int(c.getAttribute("id"))
-				jitemid = c.getAttribute("jitemid")
-				comment = {
-					'id': str(id),
-					'parentid': c.getAttribute("parentid"),
-					'subject': gettext(c.getElementsByTagName("subject")),
-					'date': gettext(c.getElementsByTagName("date")),
-					'body': gettext(c.getElementsByTagName("body")),
-					'state': metacache.get(id, {}).get('state', ''),
-				}
-				if usermap.has_key(c.getAttribute("posterid")):
-					comment["user"] = usermap[c.getAttribute("posterid")]
+	
+	commenturl = gSourceAccount.host+"/export_comments.bml?get=comment_body&startid=%d"
+	if gSourceAccount.user != gSourceAccount.journal:
+		commenturl = commenturl + "&authas=%s" % gSourceAccount.journal
+	
+	while 1:
+		r = urllib2.urlopen(urllib2.Request(commenturl % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
+		meta = xml.dom.minidom.parse(r)
+		r.close()
+		for c in meta.getElementsByTagName("comment"):
+			id = int(c.getAttribute("id"))
+			jitemid = c.getAttribute("jitemid")
+			comment = {
+				'id': str(id),
+				'parentid': c.getAttribute("parentid"),
+				'subject': gettext(c.getElementsByTagName("subject")),
+				'date': gettext(c.getElementsByTagName("date")),
+				'body': gettext(c.getElementsByTagName("body")),
+				'state': metacache.get(id, {}).get('state', ''),
+			}
+			if usermap.has_key(c.getAttribute("posterid")):
+				comment["user"] = usermap[c.getAttribute("posterid")]
 
-				path = os.path.join(gSourceAccount.journal, makeItemName(jitemid, 'entry'))
-				if not os.path.exists(path):
-					os.makedirs(path)
-				try:
-					entry = xml.dom.minidom.parse(os.path.join(path, "comments.xml"))
-				except:
-					entry = xml.dom.minidom.getDOMImplementation().createDocument(None, "comments", None)
+			path = os.path.join(gSourceAccount.journal, makeItemName(jitemid, 'entry'))
+			if not os.path.exists(path):
+				os.makedirs(path)
+			try:
+				entry = xml.dom.minidom.parse(os.path.join(path, "comments.xml"))
+			except:
+				entry = xml.dom.minidom.getDOMImplementation().createDocument(None, "comments", None)
 
-				found = 0
-				for d in entry.getElementsByTagName("comment"):
-					if int(d.getElementsByTagName("id")[0].firstChild.nodeValue) == id:
-						found = 1
-						break
+			found = 0
+			for d in entry.getElementsByTagName("comment"):
+				if int(d.getElementsByTagName("id")[0].firstChild.nodeValue) == id:
+					found = 1
+					break
 
-				if refreshall or not found:
-					if gAllEntries.has_key(jitemid):
-						cmt = Comment(comment)
-						gAllEntries[jitemid].addComment(cmt)
-					entry.documentElement.appendChild(createxml(entry, "comment", comment))
-					
-					f = codecs.open(os.path.join(path, "comments.xml"), "w", "UTF-8")
-					entry.writexml(f)
-					f.close()
-					
-					newcomments += 1
+			if refreshall or not found:
+				if gAllEntries.has_key(jitemid):
+					cmt = Comment(comment)
+					gAllEntries[jitemid].addComment(cmt)
+				entry.documentElement.appendChild(createxml(entry, "comment", comment))
+				
+				f = codecs.open(os.path.join(path, "comments.xml"), "w", "UTF-8")
+				entry.writexml(f)
+				f.close()
+				
+				newcomments += 1
 
-				if id > maxid:
-					maxid = id
-			if maxid >= newmaxid:
-				break
+			if id > maxid:
+				maxid = id
+		if maxid >= newmaxid:
+			break
 
 	return (maxid, newcomments)
 	# end fetch comments
@@ -1265,7 +1272,7 @@ def main(options):
 	
 		
 def nukeall(options):
-	# note copy and pasted code blocks: refactor
+	# TODO note copy and pasted code blocks: refactor
 	try:
 		cfparser = ConfigParser.SafeConfigParser()
 	except StandardError, e:

@@ -3,7 +3,8 @@
 # Set to True if you want to repost entries, False if not.
 migrate: True
 # You can restrict migration to just the entries that have one of the following
-# tags. Use commas to separate tags in the list.
+# tags. Use commas to separate tags in the list. Comment this out if you want
+# to migrate everything.
 migrate-these-tags: example 1, example tag 2, third tag I want to copy
 # generate html for each entry? True or False
 generate-html: True
@@ -18,7 +19,7 @@ migrate-community-posts-by-others: False
 
 [source]
 # The host of the journal you're backing up.
-server: http://livejournal.com
+server: livejournal.com
 # Your user name.
 user: myusername
 # Your password. Will not be sent in the clear; this tool uses the challenge
@@ -27,7 +28,9 @@ password: mypassword
 # communities: sourcecomm1 sourcecomm2
 
 [destination]
-server: http://insanejournal.com
+# Where you're migrating to, if you are. You can omit this section or leave
+# it commented out if you're not copying your journal to another site.
+server: insanejournal.com
 user: myotheruser
 password: myotherpassword
 # communities: destcomm1 destcomm2
