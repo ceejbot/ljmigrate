@@ -4,7 +4,7 @@
 Based on ljdump; original ljdump license & header in LICENCE.text.
 Extensive modifications by antennapedia.
 Version 1.5
-7 January 2009
+10 January 2009
 
 BSD licence mumbo-jumbo to follow. By which I mean, do what you want.
 See README.text for documentation.
@@ -33,7 +33,7 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.5 090109b Fri Jan  9 09:38:31 PST 2009'
+__version__ = '1.5 090513a SMon Apr 13 19:20:00 PDT 2009'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
@@ -113,9 +113,14 @@ class Account(object):
 		self.journal_list = []
 		self.groupmap = None
 		self.readUserPicInfo()
+		
+	def pathForJournal(self):
+		if not hasattr(self, '_path'):
+			self._path = os.path.join(self.site, self.journal)
+		return self._path
 	
 	def metapath(self):
-		return os.path.join(self.journal, "metadata")
+		return os.path.join(self.pathForJournal(), "metadata")
 		
 	def openMetadataFile(self, name, usecodec = 1):
 		""" Convenience. """
@@ -351,7 +356,7 @@ class Account(object):
 			userpics[str(r['pickws'][i])] = r['pickwurls'][i]
 		userpics['default'] = r['defaultpicurl']
 
-		path = os.path.join(self.user, "userpics")
+		path = os.path.join(self.pathForJournal(), "userpics")
 		if not os.path.exists(path):
 			os.makedirs(path)
 		f = self.openMetadataFile("userpics.xml")
@@ -468,9 +473,9 @@ def makeItemName(id, type):
 		return "%s%s" % (type, idstr)
 	return idstr
 
-def writedump(user, itemid, type, event):
+def writedump(source, itemid, type, event):
 	itemname = makeItemName(itemid, type)
-	path = os.path.join(user, itemname)
+	path = os.path.join(source.pathForJournal(), itemname)
 	if not os.path.exists(path):
 		os.makedirs(path)
 	fn = os.path.join(path, "%s.xml" % (type, ))
@@ -851,7 +856,7 @@ def fetchItem(item):
 			if not entry:
 				ljmLog("Source returned unexpected result when queried for item %s" % (item['item']))
 				return None
-			writedump(gSourceAccount.journal, item['item'], 'entry', entry)
+			writedump(gSourceAccount, item['item'], 'entry', entry)
 			entry['event'] = convertBinary(entry['event'])
 
 			eobj = Entry(entry, gSourceAccount.user, gSourceAccount.journal)
@@ -882,9 +887,10 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 	""" This method is an embarrassment. Refactor to make it much smaller.
 	"""
 	ljmLog("Fetching journal entries for: %s" % gSourceAccount.journal)
-	if not os.path.exists(gSourceAccount.journal):
-		os.makedirs(gSourceAccount.journal)
-		ljmLog("Created subdirectory: %s" % gSourceAccount.journal)
+	path = gSourceAccount.pathForJournal()
+	if not os.path.exists(path):
+		os.makedirs(path)
+		ljmLog("Created subdirectory: %s" % path)
 
 	global gAllEntries, errors, newentries, gMigrationTags  # HACK
 
@@ -1017,7 +1023,7 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 							try:
 								code = int(e.faultCode)
 							except:
-								code = e.faultCode
+								code = 0
 							if code == 101:
 								ljmLog("Fault reported is: %s; retrying" % e.faultString)
 								keepTrying -= 1
@@ -1036,6 +1042,9 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 								keepTrying = 0
 							else:
 								ljmException("Fault: "+e.faultString, e)
+								keepTrying = 0
+							else:
+								ljmException("Fault: "+e)
 								keepTrying = 0
 						except exceptions.Exception, x:
 							ljmException("reposting item: %s" % item['item'], x)
@@ -1080,7 +1089,7 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 def generateHTML(gSourceAccount, forceIndex=0):
 	global gAllEntries
 	ljmLog("Now generating a simple html version of your posts + comments.")
-	htmlpath = os.path.join(gSourceAccount.journal, 'html')
+	htmlpath = os.path.join(gSourceAccount.pathForJournal(), 'html')
 	if not os.path.exists(htmlpath):
 		os.makedirs(htmlpath)
 	
@@ -1172,7 +1181,7 @@ def fetchNewComments(lastmaxid, lastsync, refreshall=0):
 			if usermap.has_key(c.getAttribute("posterid")):
 				comment["user"] = usermap[c.getAttribute("posterid")]
 
-			path = os.path.join(gSourceAccount.journal, makeItemName(jitemid, 'entry'))
+			path = os.path.join(gSourceAccount.pathForJournal(), makeItemName(jitemid, 'entry'))
 			if not os.path.exists(path):
 				os.makedirs(path)
 			try:
@@ -1215,9 +1224,10 @@ def main(options):
 	fetchConfig()
 
 	firstRunForAccount = 0
-	if not os.path.exists(gSourceAccount.user):
-		os.makedirs(gSourceAccount.user)
-		print "Created subdirectory: %s" % gSourceAccount.user
+	p = gSourceAccount.pathForJournal()
+	if not os.path.exists(p):
+		os.makedirs(p)
+		print "Created subdirectory: %s" % p
 		firstRunForAccount = 1
 	
 	path = gSourceAccount.metapath()

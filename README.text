@@ -204,6 +204,11 @@ be. That means if you migrate a journal, every single post will appear
 as new in member's friendslists. This is a restriction imposed by the LJ client
 protocol.
 
+There is one limitation to LJ's comment exporting script that affects
+how communities are archived. You must be a maintainer of the community to
+get access to get access to the comments. This is an artifact of
+how LJ's export_comments.bml script works.
+
 
 ## Secret nuclear option
 
@@ -223,6 +228,10 @@ Run the tool with the --nuke flag:
 
 Answer the two questions with Y if you REALLY REALLY mean it. THERE IS NO
 GOING BACK ON THIS. ONLY RUN IT IF YOU REALLY WANT ALL YOUR POSTS DELETED.
+
+## Troubleshooting
+
+
 
 ## Many thanks to the brave testers!
 
