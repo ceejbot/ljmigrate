@@ -33,7 +33,7 @@ import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.5 090513a SMon Apr 13 19:20:00 PDT 2009'
+__version__ = '1.5 090518a Sat Apr 18 18:12:29 PDT 2009'
 __author__ = 'Antennapedia'
 __license__ = 'BSD license'
 
@@ -1042,9 +1042,6 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 								keepTrying = 0
 							else:
 								ljmException("Fault: "+e.faultString, e)
-								keepTrying = 0
-							else:
-								ljmException("Fault: "+e)
 								keepTrying = 0
 						except exceptions.Exception, x:
 							ljmException("reposting item: %s" % item['item'], x)
