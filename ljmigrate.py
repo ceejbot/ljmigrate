@@ -34,7 +34,7 @@ from xml.sax import saxutils
 import ConfigParser
 
 __version__ = '1.5 090518a Sat Apr 18 18:12:29 PDT 2009'
-__author__ = 'Antennapedia'
+__author__ = 'C J Silverio'
 __license__ = 'BSD license'
 
 configpath = "ljmigrate.cfg"
@@ -75,6 +75,9 @@ class ProxiedTransport(xmlrpclib.Transport):
 
 
 class Account(object):
+"""
+Data and methods for manipulating a single account.
+"""
 
 	def __init__(self, host="", user="", password="", proxyHost=None, proxyPort=None):
 		if host.endswith('/'):
@@ -113,13 +116,17 @@ class Account(object):
 		self.journal_list = []
 		self.groupmap = None
 		self.readUserPicInfo()
-		
+	
 	def pathForJournal(self):
+	# Path for journal backup on local file system.
 		if not hasattr(self, '_path'):
 			self._path = os.path.join(self.site, self.journal)
 		return self._path
 	
 	def metapath(self):
+	# Path for storing meta information about a backed-up journal,
+	# such as logs, the userpic data structure, and the hash that records
+	# which entries we've already backed up.
 		return os.path.join(self.pathForJournal(), "metadata")
 		
 	def openMetadataFile(self, name, usecodec = 1):
@@ -433,6 +440,7 @@ class Account(object):
 		return result
 
 ###
+# Everyone loathes xml.
 
 def nodeToDict(node):
 	result = {}
@@ -824,6 +832,7 @@ class Comment(object):
 		
 		return '\n'.join(result)
 
+# Struggle to do everything in utf8.
 def convertBinary(item):
 	if type(item) in [types.StringType, types.UnicodeType]:
 		return item.encode('utf-8', 'replace')
