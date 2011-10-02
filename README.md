@@ -1,4 +1,4 @@
-ljmigrate 1.4
+# ljmigrate 1.5
 
 A tool for archiving posts from any LiveJournal clone site and optionally 
 migrating them to any other LJ-clone site. Useful for moving from LiveJournal
@@ -7,12 +7,12 @@ to GreatestJournal or InsaneJournal, for instance.
 Based on ljdump; original ljdump license & header at the bottom of the single
 source file. http://hewgill.com/software/ljdump/
 
-Extensive modifications by antennapedia.
-Version 1.3
-3 August 2007
+Extensive modifications by  C J Silverio.
+Version 1.5
+18 April 2009
 
 BSD licence mumbo-jumbo to follow. By which I mean, do what you want 
-with the source.
+with the source. If you find it useful, excellent!
 
 To get usage information:
 	./ljmigrate --help 
@@ -231,7 +231,7 @@ GOING BACK ON THIS. ONLY RUN IT IF YOU REALLY WANT ALL YOUR POSTS DELETED.
 
 ## Troubleshooting
 
-
+TBD
 
 ## Many thanks to the brave testers!
 
