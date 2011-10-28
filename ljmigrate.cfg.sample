@@ -19,7 +19,7 @@ migrate-community-posts-by-others: False
 
 [source]
 # The host of the journal you're backing up.
-server: livejournal.com
+server: www.livejournal.com
 # Your user name.
 user: myusername
 # Your password. Will not be sent in the clear; this tool uses the challenge

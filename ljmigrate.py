@@ -75,9 +75,7 @@ class ProxiedTransport(xmlrpclib.Transport):
 
 
 class Account(object):
-"""
-Data and methods for manipulating a single account.
-"""
+# Data and methods for manipulating a single account.
 
 	def __init__(self, host="", user="", password="", proxyHost=None, proxyPort=None):
 		if host.endswith('/'):
@@ -1138,21 +1136,28 @@ def fetchNewComments(lastmaxid, lastsync, refreshall=0):
 	
 	maxid = lastmaxid
 	while 1:
-		r = urllib2.urlopen(urllib2.Request(commenturl % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
-		meta = xml.dom.minidom.parse(r)
-		r.close()
-		for c in meta.getElementsByTagName("comment"):
-			id = int(c.getAttribute("id"))
-			metacache[id] = {
-				'posterid': c.getAttribute("posterid"),
-				'state': c.getAttribute("state"),
-			}
-			if id > maxid:
-				maxid = id
-		for u in meta.getElementsByTagName("usermap"):
-			usermap[u.getAttribute("id")] = u.getAttribute("user")
-		if maxid >= int(meta.getElementsByTagName("maxid")[0].firstChild.nodeValue):
+		try:
+			r = urllib2.urlopen(urllib2.Request(commenturl % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
+			meta = xml.dom.minidom.parse(r)
+		except:
+			# No attempt at recovery.
+			ljmLog("error reading export_comments.bml; skipping.")
+			r.close()
 			break
+		else:
+			r.close()
+			for c in meta.getElementsByTagName("comment"):
+				id = int(c.getAttribute("id"))
+				metacache[id] = {
+					'posterid': c.getAttribute("posterid"),
+					'state': c.getAttribute("state"),
+				}
+				if id > maxid:
+					maxid = id
+			for u in meta.getElementsByTagName("usermap"):
+				usermap[u.getAttribute("id")] = u.getAttribute("user")
+			if maxid >= int(meta.getElementsByTagName("maxid")[0].firstChild.nodeValue):
+				break
 	
 	f = gSourceAccount.openMetadataFile('comment.meta', 0)
 	pickle.dump(metacache, f)
@@ -1170,51 +1175,57 @@ def fetchNewComments(lastmaxid, lastsync, refreshall=0):
 		commenturl = commenturl + "&authas=%s" % gSourceAccount.journal
 	
 	while 1:
-		r = urllib2.urlopen(urllib2.Request(commenturl % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
-		meta = xml.dom.minidom.parse(r)
-		r.close()
-		for c in meta.getElementsByTagName("comment"):
-			id = int(c.getAttribute("id"))
-			jitemid = c.getAttribute("jitemid")
-			comment = {
-				'id': str(id),
-				'parentid': c.getAttribute("parentid"),
-				'subject': gettext(c.getElementsByTagName("subject")),
-				'date': gettext(c.getElementsByTagName("date")),
-				'body': gettext(c.getElementsByTagName("body")),
-				'state': metacache.get(id, {}).get('state', ''),
-			}
-			if usermap.has_key(c.getAttribute("posterid")):
-				comment["user"] = usermap[c.getAttribute("posterid")]
-
-			path = os.path.join(gSourceAccount.pathForJournal(), makeItemName(jitemid, 'entry'))
-			if not os.path.exists(path):
-				os.makedirs(path)
-			try:
-				entry = xml.dom.minidom.parse(os.path.join(path, "comments.xml"))
-			except:
-				entry = xml.dom.minidom.getDOMImplementation().createDocument(None, "comments", None)
-
-			found = 0
-			for d in entry.getElementsByTagName("comment"):
-				if int(d.getElementsByTagName("id")[0].firstChild.nodeValue) == id:
-					found = 1
-					break
-
-			if refreshall or not found:
-				if gAllEntries.has_key(jitemid):
-					cmt = Comment(comment)
-					gAllEntries[jitemid].addComment(cmt)
-				entry.documentElement.appendChild(createxml(entry, "comment", comment))
-				
-				f = codecs.open(os.path.join(path, "comments.xml"), "w", "UTF-8")
-				entry.writexml(f)
-				f.close()
-				
-				newcomments += 1
-
-			if id > maxid:
-				maxid = id
+		try:
+			r = urllib2.urlopen(urllib2.Request(commenturl % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
+			meta = xml.dom.minidom.parse(r)
+		except:
+			ljmLog("error reading export_comments.bml; skipping.")
+			break
+		else:
+			r.close()
+			for c in meta.getElementsByTagName("comment"):
+				id = int(c.getAttribute("id"))
+				jitemid = c.getAttribute("jitemid")
+				comment = {
+					'id': str(id),
+					'parentid': c.getAttribute("parentid"),
+					'subject': gettext(c.getElementsByTagName("subject")),
+					'date': gettext(c.getElementsByTagName("date")),
+					'body': gettext(c.getElementsByTagName("body")),
+					'state': metacache.get(id, {}).get('state', ''),
+				}
+				if usermap.has_key(c.getAttribute("posterid")):
+					comment["user"] = usermap[c.getAttribute("posterid")]
+	
+				path = os.path.join(gSourceAccount.pathForJournal(), makeItemName(jitemid, 'entry'))
+				if not os.path.exists(path):
+					os.makedirs(path)
+				try:
+					entry = xml.dom.minidom.parse(os.path.join(path, "comments.xml"))
+				except:
+					entry = xml.dom.minidom.getDOMImplementation().createDocument(None, "comments", None)
+	
+				found = 0
+				for d in entry.getElementsByTagName("comment"):
+					if int(d.getElementsByTagName("id")[0].firstChild.nodeValue) == id:
+						found = 1
+						break
+	
+				if refreshall or not found:
+					if gAllEntries.has_key(jitemid):
+						cmt = Comment(comment)
+						gAllEntries[jitemid].addComment(cmt)
+					entry.documentElement.appendChild(createxml(entry, "comment", comment))
+					
+					f = codecs.open(os.path.join(path, "comments.xml"), "w", "UTF-8")
+					entry.writexml(f)
+					f.close()
+					
+					newcomments += 1
+	
+				if id > maxid:
+					maxid = id
+				# end comments.xml handling
 		if maxid >= newmaxid:
 			break
 
