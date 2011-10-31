@@ -1130,7 +1130,8 @@ def fetchNewComments(lastmaxid, lastsync, refreshall=0):
 
 	newcomments = 0
 
-	commenturl = gSourceAccount.host+"/export_comments.bml?get=comment_meta&startid=%d"
+	# Phase 1: fetch comment metadata
+	commenturl = gSourceAccount.host+"/export_comments.bml?&get=comment_meta&startid=%d"
 	if gSourceAccount.user != gSourceAccount.journal:
 		commenturl = commenturl + "&authas=%s" % gSourceAccount.journal
 	
@@ -1139,11 +1140,12 @@ def fetchNewComments(lastmaxid, lastsync, refreshall=0):
 		try:
 			r = urllib2.urlopen(urllib2.Request(commenturl % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
 			meta = xml.dom.minidom.parse(r)
-		except:
+		except Exception, e:
 			# No attempt at recovery.
-			ljmLog("error reading export_comments.bml; skipping.")
+			ljmLog("error reading export_comments.bml for comment metadata; skipping. Error follows.")
+			ljmLog(e)
 			r.close()
-			break
+			return (lastmaxid, newcomments)
 		else:
 			r.close()
 			for c in meta.getElementsByTagName("comment"):
@@ -1170,6 +1172,7 @@ def fetchNewComments(lastmaxid, lastsync, refreshall=0):
 	newmaxid = maxid
 	maxid = lastmaxid
 	
+	# Phase 2: fetch comment bodies.
 	commenturl = gSourceAccount.host+"/export_comments.bml?get=comment_body&startid=%d"
 	if gSourceAccount.user != gSourceAccount.journal:
 		commenturl = commenturl + "&authas=%s" % gSourceAccount.journal
@@ -1179,7 +1182,8 @@ def fetchNewComments(lastmaxid, lastsync, refreshall=0):
 			r = urllib2.urlopen(urllib2.Request(commenturl % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
 			meta = xml.dom.minidom.parse(r)
 		except:
-			ljmLog("error reading export_comments.bml; skipping.")
+			ljmLog("error reading export_comments.bml for comment bodies; skipping.")
+			r.close()
 			break
 		else:
 			r.close()
