@@ -6,11 +6,14 @@ Extensive modifications by antennapedia.
 Version 1.5
 10 January 2009
 
+Python 2.4 or later is required.
+
 BSD licence mumbo-jumbo to follow. By which I mean, do what you want.
 See README.text for documentation.
 """
 
 import codecs
+import cookielib
 import exceptions
 import fnmatch
 import httplib
@@ -27,19 +30,20 @@ import sys
 import time
 import traceback
 import types
+import urllib
 import urllib2
 import xml.dom.minidom
 import xmlrpclib
 from xml.sax import saxutils
 import ConfigParser
 
-__version__ = '1.5 090518a Sat Apr 18 18:12:29 PDT 2009'
+__version__ = '1.5 111030a Sun Oct 30 21:41:58 PDT 2011'
 __author__ = 'C J Silverio'
 __license__ = 'BSD license'
 
 configpath = "ljmigrate.cfg"
 
-# hackity hack
+# hackity hack; a sure sign I need to restructure.
 global gSourceAccount, gDestinationAccount, gAllEntries, gMigrate, gGenerateHtml, gMigrationTags
 
 # lj's time format: 2004-08-11 13:38:00
@@ -78,6 +82,7 @@ class Account(object):
 # Data and methods for manipulating a single account.
 
 	def __init__(self, host="", user="", password="", proxyHost=None, proxyPort=None):
+		# Clean up some common input problems with the host.
 		if host.endswith('/'):
 			host = host[:-1]
 		m = re.search("(.*)/interface/xmlrpc", host)
@@ -109,7 +114,7 @@ class Account(object):
 			# default transport
 			self.server_proxy = xmlrpclib.ServerProxy(self.host+"/interface/xmlrpc")
 
-		self.session = ""
+		self.ljsession = ""
 		self.journal = user
 		self.journal_list = []
 		self.groupmap = None
@@ -145,14 +150,77 @@ class Account(object):
 		return fp
 
 	def makeSession(self):
-		r = urllib2.urlopen(self.flat_api, "mode=getchallenge")
+		# Set up our url opener so it can save cookies.
+		self.cookiejar = cookielib.CookieJar()
+		opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(self.cookiejar))
+		urllib2.install_opener(opener)
+		self.urlopener = urllib2.urlopen
+		
+		if not 'livejournal' in self.site:
+			self.makeSessionSimple()
+			return
+		
+		# The old challenge/response method of logging in was broken by the infamous
+		# release 86. Now we must use login.bml to scrape the ljmastersession and ljloggedin
+		# cookies out of the response.
+		ljmLog("Generating session using login.bml")
+		
+		# First get a challenge.
+		try:
+			request = urllib2.Request(self.flat_api, "mode=getchallenge")
+			handle = self.urlopener(request)
+			response = self.handleFlatResponse(handle)
+			handle.close()
+		except IOError, e:
+			ljmException("network error while establishing session", e)
+			return
+		
+		challenge = response['challenge']
+		challengeResponse = self.calcChallenge(response['challenge'])
+
+		# Post the challenge response to login.bml.
+		try:
+			values = { 'user' : self.user,
+				'chal' : challenge,
+				'response' : challengeResponse }
+			postdata = urllib.urlencode(values)
+			reqheaders =  {'User-agent' : 'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'} # fake a user agent
+			request = urllib2.Request('https://' + self.site + '/login.bml', postdata, reqheaders)
+			handle = self.urlopener(request)
+		except IOError, e:
+			ljmException("network error while establishing session", e)
+		else:
+			# We won't actually use these, because we rely on the cookiejar to send the cookies 
+			# in subsequent requests without manual fussing. I'm saving them just in case.
+			# No doubt next time I look at this I'll delete this code.
+			for index, cookie in enumerate(self.cookiejar):
+				if cookie.name == 'ljloggedin':
+					self.ljloggedin = cookie.value
+				elif cookie.name == 'ljsession':
+					self.ljsession = cookie.value
+				elif cookie.name == 'ljmastersession':
+					self.ljmastersession = cookie.value
+				#else:
+				#	print cookie.name, ":", cookie.value
+			handle.close()
+	# end makeSession()
+	
+	def makeSessionSimple(self):
+		ljmLog("Generating session using challenge/response")
+		r = self.urlopener(self.flat_api, "mode=getchallenge")
 		response = self.handleFlatResponse(r)
 		r.close()
-		r = urllib2.urlopen(self.flat_api, "mode=sessiongenerate&user=%s&auth_method=challenge&auth_challenge=%s&auth_response=%s" % 
+		r = self.urlopener(self.flat_api, "mode=sessiongenerate&user=%s&auth_method=challenge&auth_challenge=%s&auth_response=%s" % 
 				(self.user, response['challenge'], self.calcChallenge(response['challenge']) ))
 		response = self.handleFlatResponse(r)
 		r.close()
-		self.session = response['ljsession']
+		self.ljsession = response['ljsession']
+
+		cookie = cookielib.Cookie(version=0, name='ljsession', value=self.ljsession, port=None, port_specified=False, 
+			domain=self.site, domain_specified=False, domain_initial_dot=False, path='/', path_specified=True, 
+			secure=False, expires=None, discard=True, comment=None, comment_url=None, rest={'HttpOnly': None}, 
+			rfc2109=False)
+		self.cookiejar.set_cookie(cookie)
 
 	def handleFlatResponse(self, response):
 		r = {}
@@ -1111,6 +1179,10 @@ def generateHTML(gSourceAccount, forceIndex=0):
 		ljmException("skipping html index generation because of error:" % id, e)
 		
 def fetchNewComments(lastmaxid, lastsync, refreshall=0):
+	# TODO 
+	# reimplement entirely using the undocumented XMLRPC api extensions here
+	# http://lj-dev.livejournal.com/838857.html
+
 	global gAllEntries
 	try:
 		f = gSourceAccount.readMetadataFile('comment.meta', 0)
@@ -1126,7 +1198,7 @@ def fetchNewComments(lastmaxid, lastsync, refreshall=0):
 	except:
 		usermap = {}
 		
-	ljmLog("Fetching journal comments for: %s" % gSourceAccount.journal)
+	ljmLog("Fetching comment metadata for: %s" % gSourceAccount.journal)
 
 	newcomments = 0
 
@@ -1138,16 +1210,17 @@ def fetchNewComments(lastmaxid, lastsync, refreshall=0):
 	maxid = lastmaxid
 	while 1:
 		try:
-			r = urllib2.urlopen(urllib2.Request(commenturl % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
-			meta = xml.dom.minidom.parse(r)
+			request = urllib2.Request(commenturl % (maxid+1))
+			handle = gSourceAccount.urlopener(request)
+			meta = xml.dom.minidom.parse(handle)
 		except Exception, e:
 			# No attempt at recovery.
 			ljmLog("error reading export_comments.bml for comment metadata; skipping. Error follows.")
 			ljmLog(e)
-			r.close()
+			handle.close()
 			return (lastmaxid, newcomments)
 		else:
-			r.close()
+			handle.close()
 			for c in meta.getElementsByTagName("comment"):
 				id = int(c.getAttribute("id"))
 				metacache[id] = {
@@ -1173,20 +1246,21 @@ def fetchNewComments(lastmaxid, lastsync, refreshall=0):
 	maxid = lastmaxid
 	
 	# Phase 2: fetch comment bodies.
+	ljmLog("Fetching comment bodies for: %s" % gSourceAccount.journal)
 	commenturl = gSourceAccount.host+"/export_comments.bml?get=comment_body&startid=%d"
 	if gSourceAccount.user != gSourceAccount.journal:
 		commenturl = commenturl + "&authas=%s" % gSourceAccount.journal
 	
 	while 1:
 		try:
-			r = urllib2.urlopen(urllib2.Request(commenturl % (maxid+1), headers = {'Cookie': "ljsession="+gSourceAccount.session}))
-			meta = xml.dom.minidom.parse(r)
+			handle = gSourceAccount.urlopener(urllib2.Request(commenturl % (maxid+1)))
+			meta = xml.dom.minidom.parse(handle)
 		except:
 			ljmLog("error reading export_comments.bml for comment bodies; skipping.")
-			r.close()
+			handle.close()
 			break
 		else:
-			r.close()
+			handle.close()
 			for c in meta.getElementsByTagName("comment"):
 				id = int(c.getAttribute("id"))
 				jitemid = c.getAttribute("jitemid")
