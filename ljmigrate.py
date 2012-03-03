@@ -488,10 +488,8 @@ class Account(object):
 		inputdir = self.pathForJournal()
 
 		for root, dirs, files in os.walk(inputdir):
-			if '.svn' in dirs: dirs.remove('.svn')
-			if '.svn' in dirs: dirs.remove('html')
-			if '.svn' in dirs: dirs.remove('metadata')
-			if '.svn' in dirs: dirs.remove('userpics')
+			for excludingDir in ('.svn', 'html', 'metadata', 'userpics'):
+				if excludingDir in dirs: dirs.remove(excludingDir)
 			yfiles = fnmatch.filter(files, 'entry.xml')
 
 			for fname in yfiles:
