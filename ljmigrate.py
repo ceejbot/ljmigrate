@@ -501,6 +501,14 @@ class Account(object):
 					entrydict = nodeToDict(e)
 					eobj = Entry(entrydict, self.user, self.journal)
 					result[entrydict['itemid']] = eobj
+
+			for commentFile in fnmatch.filter(files, 'comments.xml'):
+				path = os.path.join(root, commentFile)
+				commentxml = xml.dom.minidom.parse(path)
+				for c in commentxml.getElementsByTagName('comment'):
+					commentdict = nodeToDict(c)
+					commentobj = Comment(commentdict)
+					eobj.addComment(commentobj)
 		return result
 
 ###
@@ -748,8 +756,8 @@ class Entry(object):
 		kys.sort()
 		for k in kys:
 			comment = self.commentids[k]
-			if hasattr(comment, 'parentid') and len(comment.parentid) > 0 and self.commentids.has_key(comment.parentid):
-				self.commentids[comment.parentid].addChild(comment)
+			if hasattr(comment, 'parentid') and len(comment.parentid) > 0 and self.commentids.has_key(int(comment.parentid)):
+				self.commentids[int(comment.parentid)].addChild(comment)
 			else:
 				self.comments.append(comment)
 
@@ -876,8 +884,11 @@ class Comment(object):
 		self.subject = ''
 		self.body = ''
 		self.date = ''
-		for k in dict.keys():
-			self.__dict__[k] = convertBinary(dict[k])
+		for k,v in dict.items():
+			if k == 'id':
+				self.id = int(v)
+			else:
+				self.__dict__[k] = convertBinary(v)
 
 	def addChild(self, child):
 		self.children.append(child)
