@@ -490,25 +490,26 @@ class Account(object):
 		for root, dirs, files in os.walk(inputdir):
 			for excludingDir in ('.svn', 'html', 'metadata', 'userpics'):
 				if excludingDir in dirs: dirs.remove(excludingDir)
-			yfiles = fnmatch.filter(files, 'entry.xml')
 
-			for fname in yfiles:
-				path = os.path.join(root, fname)
-				entryxml = xml.dom.minidom.parse(path)
-				for e in entryxml.getElementsByTagName("event"):
-					test = e.getElementsByTagName('itemid')
-					if len(test) == 0: continue
-					entrydict = nodeToDict(e)
-					eobj = Entry(entrydict, self.user, self.journal)
-					result[entrydict['itemid']] = eobj
+			if 'entry.xml' not in files: continue
 
-			for commentFile in fnmatch.filter(files, 'comments.xml'):
-				path = os.path.join(root, commentFile)
-				commentxml = xml.dom.minidom.parse(path)
-				for c in commentxml.getElementsByTagName('comment'):
-					commentdict = nodeToDict(c)
-					commentobj = Comment(commentdict)
-					eobj.addComment(commentobj)
+			entryfile = os.path.join(root, 'entry.xml')
+			entryxml = xml.dom.minidom.parse(entryfile)
+			for e in entryxml.getElementsByTagName("event"):
+				test = e.getElementsByTagName('itemid')
+				if len(test) == 0: continue
+				entrydict = nodeToDict(e)
+				eobj = Entry(entrydict, self.user, self.journal)
+				result[entrydict['itemid']] = eobj
+
+			if 'comments.xml' not in files: continue
+
+			commentfile = os.path.join(root, 'comments.xml')
+			commentxml = xml.dom.minidom.parse(commentfile)
+			for c in commentxml.getElementsByTagName('comment'):
+				commentdict = nodeToDict(c)
+				commentobj = Comment(commentdict)
+				eobj.addComment(commentobj)
 		return result
 
 ###
