@@ -6,7 +6,7 @@ Extensive modifications by antennapedia.
 Version 1.5
 10 January 2009
 
-Python 2.4 or later is required.
+Python 2.6 or later is required.
 
 BSD licence mumbo-jumbo to follow. By which I mean, do what you want.
 See README.text for documentation.
@@ -55,7 +55,7 @@ def parsetime(input):
 	except ValueError, e:
 		#print e
 		return ()
-		
+
 
 # Stolen directly from the python xmlrpclib documentation.
 class ProxiedTransport(xmlrpclib.Transport):
@@ -72,7 +72,7 @@ class ProxiedTransport(xmlrpclib.Transport):
 	# overridden
 	def send_request(self, connection, handler, request_body):
 		connection.putrequest("POST", 'http://%s%s' % (self.realhost, handler))
-		
+
 	# overridden
 	def send_host(self, connection, host):
 		connection.putheader('Host', self.realhost)
@@ -90,18 +90,18 @@ class Account(object):
 			self.host = m.group(1)
 		else:
 			self.host = host
-		
+
 		m = re.search("http://(.*)", host)
 		if m:
 			self.site = m.group(1)
 		else:
 			self.site = host
 			self.host = "http://" + host
-		
+
 		self.user = user
 		self.password = password
 		self.flat_api = self.host + "/interface/flat"
-		
+
 		if proxyHost != None:
 			proxy = proxyHost
 			if proxyPort != None:
@@ -119,19 +119,19 @@ class Account(object):
 		self.journal_list = []
 		self.groupmap = None
 		self.readUserPicInfo()
-	
+
 	def pathForJournal(self):
 	# Path for journal backup on local file system.
 		if not hasattr(self, '_path'):
 			self._path = os.path.join(self.site, self.journal)
 		return self._path
-	
+
 	def metapath(self):
 	# Path for storing meta information about a backed-up journal,
 	# such as logs, the userpic data structure, and the hash that records
 	# which entries we've already backed up.
 		return os.path.join(self.pathForJournal(), "metadata")
-		
+
 	def openMetadataFile(self, name, usecodec = 1):
 		""" Convenience. """
 		if not os.path.exists(self.metapath()):
@@ -141,7 +141,7 @@ class Account(object):
 		else:
 			fp = open(os.path.join(self.metapath(), name), 'w')
 		return fp
-	
+
 	def readMetadataFile(self, name, usecodec = 1):
 		if usecodec:
 			fp = codecs.open(os.path.join(self.metapath(), name), 'r', 'utf-8', 'replace')
@@ -155,16 +155,16 @@ class Account(object):
 		opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(self.cookiejar))
 		urllib2.install_opener(opener)
 		self.urlopener = urllib2.urlopen
-		
+
 		if not 'livejournal' in self.site:
 			self.makeSessionSimple()
 			return
-		
+
 		# The old challenge/response method of logging in was broken by the infamous
 		# release 86. Now we must use login.bml to scrape the ljmastersession and ljloggedin
 		# cookies out of the response.
 		ljmLog("Generating session using login.bml")
-		
+
 		# First get a challenge.
 		try:
 			request = urllib2.Request(self.flat_api, "mode=getchallenge")
@@ -174,7 +174,7 @@ class Account(object):
 		except IOError, e:
 			ljmException("network error while establishing session", e)
 			return
-		
+
 		challenge = response['challenge']
 		challengeResponse = self.calcChallenge(response['challenge'])
 
@@ -190,7 +190,7 @@ class Account(object):
 		except IOError, e:
 			ljmException("network error while establishing session", e)
 		else:
-			# We won't actually use these, because we rely on the cookiejar to send the cookies 
+			# We won't actually use these, because we rely on the cookiejar to send the cookies
 			# in subsequent requests without manual fussing. I'm saving them just in case.
 			# No doubt next time I look at this I'll delete this code.
 			for index, cookie in enumerate(self.cookiejar):
@@ -204,21 +204,21 @@ class Account(object):
 				#	print cookie.name, ":", cookie.value
 			handle.close()
 	# end makeSession()
-	
+
 	def makeSessionSimple(self):
 		ljmLog("Generating session using challenge/response")
 		r = self.urlopener(self.flat_api, "mode=getchallenge")
 		response = self.handleFlatResponse(r)
 		r.close()
-		r = self.urlopener(self.flat_api, "mode=sessiongenerate&user=%s&auth_method=challenge&auth_challenge=%s&auth_response=%s" % 
+		r = self.urlopener(self.flat_api, "mode=sessiongenerate&user=%s&auth_method=challenge&auth_challenge=%s&auth_response=%s" %
 				(self.user, response['challenge'], self.calcChallenge(response['challenge']) ))
 		response = self.handleFlatResponse(r)
 		r.close()
 		self.ljsession = response['ljsession']
 
-		cookie = cookielib.Cookie(version=0, name='ljsession', value=self.ljsession, port=None, port_specified=False, 
-			domain=self.site, domain_specified=False, domain_initial_dot=False, path='/', path_specified=True, 
-			secure=False, expires=None, discard=True, comment=None, comment_url=None, rest={'HttpOnly': None}, 
+		cookie = cookielib.Cookie(version=0, name='ljsession', value=self.ljsession, port=None, port_specified=False,
+			domain=self.site, domain_specified=False, domain_initial_dot=False, path='/', path_specified=True,
+			secure=False, expires=None, discard=True, comment=None, comment_url=None, rest={'HttpOnly': None},
 			rfc2109=False)
 		self.cookiejar.set_cookie(cookie)
 
@@ -235,7 +235,7 @@ class Account(object):
 				value = value[:len(value)-1]
 			r[name] = value
 		return r
-	
+
 	def doChallenge(self, params):
 		challenge = self.server_proxy.LJ.XMLRPC.getchallenge()
 		params.update({
@@ -247,7 +247,7 @@ class Account(object):
 
 	def calcChallenge(self, challenge):
 		return md5.new(challenge+md5.new(self.password).hexdigest()).hexdigest()
-		
+
 	def getUserPics(self):
 		params = {
 			'username': self.user,
@@ -260,7 +260,7 @@ class Account(object):
 		params = self.doChallenge(params)
 		resp = self.server_proxy.LJ.XMLRPC.login(params)
 		return resp
-	
+
 	def getSyncItems(self, lastsync):
 		params = {
 			'username': self.user,
@@ -273,7 +273,7 @@ class Account(object):
 		params = self.doChallenge(params)
 		r = self.server_proxy.LJ.XMLRPC.syncitems(params)
 		return r['syncitems']
-		
+
 	def getOneEvent(self, itemid):
 		params = {
 			'username': self.user,
@@ -283,7 +283,7 @@ class Account(object):
 		}
 		if self.journal != self.user:
 			params['usejournal'] = self.journal
-		
+
 		params = self.doChallenge(params)
 		e = self.server_proxy.LJ.XMLRPC.getevents(params)
 		if len(e['events']) > 0:
@@ -291,20 +291,20 @@ class Account(object):
 		else:
 			ljmLog(e)
 			return None
-		
+
 	def postEntry(self, entry):
 		params = {
 			'username': self.user,
 			'ver': 1,
 			'lineendings': 'unix',
 		}
-		
+
 		if entry.has_key('subject'): params['subject'] = entry['subject']
 		if entry.has_key('event'): params['event'] = entry['event']
 		if entry.has_key('security'): params['security'] = entry['security']
 		if entry.has_key('allowmask'): params['allowmask'] = entry['allowmask']
 		if entry.has_key('props'): params['props'] = entry['props']
-		if entry.has_key('props'): 
+		if entry.has_key('props'):
 			params['props'] = entry['props']
 		else:
 			params['props'] = {}
@@ -314,7 +314,7 @@ class Account(object):
 		else:
 			# LJ does not allow you to create backdated entries in communities
 			params['props']['opt_backdated'] = 1
-		
+
 		timetuple = parsetime(entry['eventtime'])
 		if len(timetuple) < 5:
 			return 0
@@ -339,13 +339,13 @@ class Account(object):
 
 		if self.journal != self.user:
 			params['usejournal'] = self.journal
-		
+
 		if entry.has_key('subject'): params['subject'] = entry['subject']
 		if entry.has_key('event'): params['event'] = entry['event']
 		if entry.has_key('security'): params['security'] = entry['security']
 		if entry.has_key('allowmask'): params['allowmask'] = entry['allowmask']
 		if entry.has_key('props'): params['props'] = entry['props']
-		
+
 		timetuple = parsetime(entry['eventtime'])
 		if len(timetuple) < 5:
 			return 0
@@ -371,38 +371,38 @@ class Account(object):
 		}
 		if self.journal != self.user:
 			params['usejournal'] = self.journal
-		
+
 		params = self.doChallenge(params)
 		result = self.server_proxy.LJ.XMLRPC.editevent(params)
 		return result
-	
+
 	def getfriendgroups(self):
 		params = {
 			'username': self.user,
 			'ver': 1,
 			'lineendings': 'unix',
 		}
-		
+
 		params = self.doChallenge(params)
 		result = self.server_proxy.LJ.XMLRPC.getfriendgroups(params)
 		return result
-		
+
 	def getfriends(self):
 		params = {
 			'username': self.user,
 			'ver': 1,
 			'lineendings': 'unix',
 		}
-		
+
 		params = self.doChallenge(params)
 		result = self.server_proxy.LJ.XMLRPC.getfriends(params)
 		return result
-	
+
 	def readUserPicInfo(self):
 		self.userpictypes = {}
 		self.userPictHash = {}
 		try:
-			path = os.path.join(self.user, "userpics")
+			path = os.path.join(self.pathForJournal(), "userpics")
 			fp = self.readMetadataFile("userpics.xml")
 			string = fp.read()
 			fp.close()
@@ -418,11 +418,11 @@ class Account(object):
 			# eat the error and just get them all fresh
 			# print e
 			pass
-	
-		
+
+
 	def fetchUserPics(self, dontFetchImageData=1):
 		ljmLog("Recording userpic keyword info for: %s" % self.user)
-	
+
 		r = self.getUserPics()
 		userpics = {}
 		for i in range(0, len(r['pickws'])):
@@ -433,12 +433,12 @@ class Account(object):
 		if not os.path.exists(path):
 			os.makedirs(path)
 		f = self.openMetadataFile("userpics.xml")
-		
+
 		f.write('<?xml version="1.0" encoding="utf-8" ?>\n')
 		f.write("<userpics>\n")
 		for p in userpics:
 			kwd = p.decode('utf-8', 'replace')
-			
+
 			doDownload = 0
 			if self.userpictypes.has_key(kwd):
 				picfn = os.path.join(path, "%s.%s" % (canonicalizeFilename(kwd), self.userpictypes[kwd]))
@@ -447,7 +447,7 @@ class Account(object):
 			else:
 				doDownload = 1
 			if dontFetchImageData: doDownload = 0 # but respect the flag
-			
+
 			if doDownload:
 				ljmLog(u'    Getting image data for keywords "%s"' % kwd.encode('ascii', 'replace'))
 				try:
@@ -470,7 +470,7 @@ class Account(object):
 
 		f.write("</userpics>\n")
 		f.close()
-		
+
 	def readGroupMap(self):
 		if self.groupmap == None:
 			try:
@@ -481,28 +481,35 @@ class Account(object):
 				# just start fresh
 				groupmap = {}
 			self.groupmap = groupmap
-			
+
 	def readAllEntryFiles(self):
 		from StringIO import StringIO
 		result = {}
-		inputdir = self.journal
+		inputdir = self.pathForJournal()
 
 		for root, dirs, files in os.walk(inputdir):
-			if '.svn' in dirs: dirs.remove('.svn')	
-			if '.svn' in dirs: dirs.remove('html')	
-			if '.svn' in dirs: dirs.remove('metadata')	
-			if '.svn' in dirs: dirs.remove('userpics')	
-			yfiles = fnmatch.filter(files, 'entry.xml')
-		
-			for fname in yfiles:
-				path = os.path.join(root, fname)
-				entryxml = xml.dom.minidom.parse(path)
-				for e in entryxml.getElementsByTagName("event"):
-					test = e.getElementsByTagName('itemid')
-					if len(test) == 0: continue
-					entrydict = nodeToDict(e)
-					eobj = Entry(entrydict, self.user, self.journal)
-					result[entrydict['itemid']] = eobj
+			for excludingDir in ('.svn', 'html', 'metadata', 'userpics'):
+				if excludingDir in dirs: dirs.remove(excludingDir)
+
+			if 'entry.xml' not in files: continue
+
+			entryfile = os.path.join(root, 'entry.xml')
+			entryxml = xml.dom.minidom.parse(entryfile)
+			for e in entryxml.getElementsByTagName("event"):
+				test = e.getElementsByTagName('itemid')
+				if len(test) == 0: continue
+				entrydict = nodeToDict(e)
+				eobj = Entry(entrydict, self.user, self.journal)
+				result[entrydict['itemid']] = eobj
+
+			if 'comments.xml' not in files: continue
+
+			commentfile = os.path.join(root, 'comments.xml')
+			commentxml = xml.dom.minidom.parse(commentfile)
+			for c in commentxml.getElementsByTagName('comment'):
+				commentdict = nodeToDict(c)
+				commentobj = Comment(commentdict)
+				eobj.addComment(commentobj)
 		return result
 
 ###
@@ -513,11 +520,11 @@ def nodeToDict(node):
 	for child in node.childNodes:
 		if child.nodeType == node.TEXT_NODE:
 			continue
-		result[child.tagName] = nodeToDict(child)	
+		result[child.tagName] = nodeToDict(child)
 	if len(result.keys()) == 0:
 		return getTextFromNode(node.childNodes)
 	return result
-	
+
 def getTextFromNode(nodelist):
 	rc = ""
 	for node in nodelist:
@@ -601,7 +608,7 @@ def ljmException(message, exc):
 		gSourceAccount.runlog.write(text+"\n")
 	except:
 		pass
-		
+
 def endLogging():
 	ljmLog("Run ended normally: %s" % time.asctime())
 	gSourceAccount.runlog.close()
@@ -617,13 +624,13 @@ def fetchConfig():
 		cfparser = ConfigParser.SafeConfigParser()
 	except StandardError, e:
 		cfparser = ConfigParser.ConfigParser()
-		
+
 	try:
 		cfparser.readfp(open(options.configFile))
 	except StandardError, e:
 		print "Problem reading config file: %s" % str(e)
 		sys.exit()
-	
+
 	pHost = None
 	pPort = None
 	try:
@@ -640,22 +647,22 @@ def fetchConfig():
 		gSourceAccount = Account(cfparser.get('source', 'server'), cfparser.get('source', 'user'), cfparser.get('source', 'password'), pHost, pPort)
 	except ConfigParser.NoSectionError, e:
 		print "The configuration file has no 'source' section."
-		print "The tool can't run without a source journal set." 
+		print "The tool can't run without a source journal set."
 		print "Fix it and try again."
 		sys.exit()
 	except ConfigParser.NoOptionError, e:
 		print "The configuration file is missing parameters for the source journal."
-		print "The tool can't run without a source journal set." 
+		print "The tool can't run without a source journal set."
 		print "Copy the sample config and try again."
 		sys.exit()
-	
+
 	try:
 		jrn = cfparser.get('source', 'communities').strip()
 		if len(jrn) > 0:
 			gSourceAccount.journal_list = re.split(', |,| ', jrn)
 	except ConfigParser.NoOptionError, e:
 		pass
-		
+
 	gMigrate = 0
 	try:
 		item = cfparser.get('settings', 'migrate')
@@ -671,7 +678,7 @@ def fetchConfig():
 			gMigrateOwnOnly = 0
 	except ConfigParser.NoOptionError, e:
 		pass
-		
+
 	gMigrationTags = []
 	try:
 		item = cfparser.get('settings', 'migrate-these-tags')
@@ -688,7 +695,7 @@ def fetchConfig():
 			gMigrate = 0
 		except ConfigParser.NoOptionError, e:
 			print "The configuration file is missing parameters for the destination journal."
-			print "We can't migrate without knowing the information for the destination." 
+			print "We can't migrate without knowing the information for the destination."
 			print "Turning migration off."
 			gMigrate = 0
 		try:
@@ -741,20 +748,20 @@ class Entry(object):
 				self.__dict__[k] = convertBinary(dict[k])
 		self.comments = []
 		self.commentids = {}
-		
+
 	def addComment(self, comment):
 		self.commentids[comment.id] = comment
-		
+
 	def buildCommentTree(self):
 		kys = self.commentids.keys()
 		kys.sort()
 		for k in kys:
 			comment = self.commentids[k]
-			if hasattr(comment, 'parentid') and len(comment.parentid) > 0 and self.commentids.has_key(comment.parentid):
-				self.commentids[comment.parentid].addChild(comment)
+			if hasattr(comment, 'parentid') and len(comment.parentid) > 0 and self.commentids.has_key(int(comment.parentid)):
+				self.commentids[int(comment.parentid)].addChild(comment)
 			else:
 				self.comments.append(comment)
-	
+
 	def getStringAttribute(self, attr):
 		if not hasattr(self, attr):
 			return ""
@@ -764,12 +771,12 @@ class Entry(object):
 		if type(item) == types.UnicodeType:
 			return item
 		return unicode(item, 'utf-8', 'replace')
-		
+
 	def getProperties(self):
 		if hasattr(self, 'props') and type(self.props) == type({}):
 			return self.props
 		return {}
-	
+
 	def getStringProperty(self, tag):
 		properties = self.getProperties()
 		prop = properties.get(tag, u'')
@@ -781,7 +788,7 @@ class Entry(object):
 		if not hasattr(self, 'itemid'):
 			ljmLog("No item ID found in entry. Skipping: %s" % entry)
 			return
-		
+
 		properties = self.getProperties()
 
 		if hasattr(self, 'subject'):
@@ -790,7 +797,7 @@ class Entry(object):
 			subject = commpattern.sub(r'<b><a href="http://community.%s/\1/"><img src="http://stat.livejournal.com/img/community.gif" alt="[info]" width="16" height="16" style="vertical-align: bottom; border: 0;" />\1</a></b>' % gSourceAccount.site, subject)
 		else:
 			subject = "(No Subject)"
-		
+
 		result = doctype + tmpl_start_jour % (self.journalname, subject)
 
 		if properties.has_key('picture_keyword'):
@@ -798,7 +805,7 @@ class Entry(object):
 		else:
 			kw = 'default'
 		if gSourceAccount.userPictHash.has_key(kw):
-			picpath = gSourceAccount.userPictHash[kw].replace(self.journalname, '..')
+			picpath = os.path.relpath(gSourceAccount.userPictHash[kw], path)
 			result = result + u'<div id="picture_keyword" style="float:left; margin: 5px;"><img src="%s" alt="%s" title="%s" /></div>\n' % (picpath, kw, kw)
 		else:
 			result = result + u'<div id="picture_keyword"><b>Icon:</b> %s</div>\n' % (kw, )
@@ -814,7 +821,7 @@ class Entry(object):
 			result = result + '<div id="current_music"><b>Music:</b> %s</div>\n' % (self.getStringProperty('current_music'), )
 		if properties.has_key('taglist'):
 			result = result + '<div id="taglist"><b>Tags:</b> %s</div>\n' % (self.getStringProperty('taglist'), )
-		
+
 		if hasattr(self, 'security'):
 			security = self.getStringAttribute('security')
 			if security == 'usemask':
@@ -829,7 +836,7 @@ class Entry(object):
 					else:
 						result = result + "<b>Filtered:</b> friend group deleted; id was %d<br />\n" % filter
 				result = result + '</div>'
-			
+
 		if hasattr(self, 'event'):
 			result = result + '<br clear="left" />\n'
 			content = self.getStringAttribute('event')
@@ -837,23 +844,23 @@ class Entry(object):
 				content = content.replace("\n", "<br />\n");
 			content = userpattern.sub(r'<b><a href="http://\1.%s/"><img src="http://stat.livejournal.com/img/userinfo.gif" alt="[info]" width="17" height="17" style="vertical-align: bottom; border: 0;" />\1</a></b>' % gSourceAccount.site, content)
 			content = commpattern.sub(r'<b><a href="http://community.%s/\1/"><img src="http://stat.livejournal.com/img/community.gif" alt="[info]" width="16" height="16" style="vertical-align: bottom; border: 0;" />\1</a></b>', content)
-	
+
 			result = result + '\n<br /><div id="Content">%s</div>\n' % (content, )
-			
+
 		# emit comments
 		self.buildCommentTree()
 		for c in self.comments:
 			result = result + "<hr />\n"
 			result = result + c.emit().decode('utf-8', 'replace')
-	
+
 		result = result + tmpl_end
-		
+
 		fname = '%05d.html' % int(self.itemid)
 		fpath = os.path.join(path, fname)
 		output = codecs.open(fpath, 'w', 'utf-8', 'replace')
 		output.write(result)
 		output.close()
-		
+
 		# and finally, add it to the index accumulator
 		idxtext = '+ %s: <a href="%s">%s</a><br />' % (self.__dict__.get('eventtime', None), fname, subject)
 		indexEntries.append(idxtext)
@@ -878,24 +885,27 @@ class Comment(object):
 		self.subject = ''
 		self.body = ''
 		self.date = ''
-		for k in dict.keys():
-			self.__dict__[k] = convertBinary(dict[k])
-	
+		for k,v in dict.items():
+			if k == 'id':
+				self.id = int(v)
+			else:
+				self.__dict__[k] = convertBinary(v)
+
 	def addChild(self, child):
 		self.children.append(child)
 
 	def emit(self, indent=0):
 		result = []
-		
+
 		result.append('<div class="comment" style="margin-left: %dem; border-left: 1px dotted gray; padding-top: 1em;">' % (3 * indent, ))
 		result.append('<b>%s</b>: %s<br />' % (self.user, self.subject))
 		result.append('<b>%s</b><br />' % self.date)
 		result.append(self.body)
 		result.append('</div>')
-		
+
 		for child in self.children:
 			result.append(child.emit(indent + 1))
-		
+
 		return '\n'.join(result)
 
 # Struggle to do everything in utf8.
@@ -916,7 +926,7 @@ def recordEntryHash(entry_hash):
 	f = gSourceAccount.openMetadataFile('entry_correspondences.hash', 0)
 	pickle.dump(entry_hash, f)
 	f.close()
-		
+
 def fetchItem(item):
 	global errors, gAllEntries, newentries
 	entry = None
@@ -986,7 +996,7 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 
 	try:
 		ljmLog("recording custom friend groups")
-		grps = gSourceAccount.getfriendgroups()		
+		grps = gSourceAccount.getfriendgroups()
 		groupmap = {}
 		for g in grps.get('friendgroups'):
 			groupmap[int(math.pow(2, int(g['id'])))] = g
@@ -996,7 +1006,7 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 		gSourceAccount.groupmap = groupmap
 	except:
 		pass
-	
+
 	lastsync = ""
 	lastmaxid = 0
 	try:
@@ -1015,7 +1025,7 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 	except:
 		pass
 	origlastsync = lastsync
-	
+
 	# aaaand ignore all this if we're retrying the migration
 	if retryMigrate:
 		lastsync = ""
@@ -1033,12 +1043,12 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 			entry_hash = foo
 	except:
 		entry_hash = {}
-		
+
 	if not entry_hash.has_key(gSourceAccount.journal):
 		entry_hash[gSourceAccount.journal] = {}
-		
+
 	considerTags = (gMigrationTags != None) and (len(gMigrationTags) > 0)
-		
+
 	while 1:
 		syncitems = gSourceAccount.getSyncItems(lastsync)
 		if len(syncitems) == 0:
@@ -1048,7 +1058,7 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 				ljmLog("Fetching journal entry %s (%s)" % (item['item'], item['action']))
 				entry = fetchItem(item)
 				if not entry: continue
-				
+
 				# pulling this out into stages to make the logic clearer
 				# only migrate if we have the option set, if we have a destination account, AND we have an entry to move
 				migrateThis = (migrate and gDestinationAccount and (entry != None))
@@ -1072,7 +1082,7 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 							migrateThis = 1
 							break
 				# end migration decision
-				
+
 				if migrateThis:
 					keepTrying = 5
 					while keepTrying:
@@ -1125,7 +1135,7 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 						# end try
 					# end while
 				# end if migrate
-					
+
 			elif item['item'].startswith('C-'):
 				commentsBy += 1
 				# I think there's no way to download the comment? buh?
@@ -1139,12 +1149,12 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 		ljmLog("One entry migrated or updated on destination.")
 	else:
 		ljmLog("%d entries migrated or updated on destination." % (migrationCount, ))
-	
+
 	recordEntryHash(entry_hash)
-	
-	lastmaxid, newcomments = fetchNewComments(lastmaxid, lastsync, 0)	
+
+	lastmaxid, newcomments = fetchNewComments(lastmaxid, lastsync, 0)
 	recordLastSync(lastsync, lastmaxid)
-	
+
 	ljmLog("Local xml archive complete.")
 
 	if gGenerateHtml and not options.regenhtml:
@@ -1164,10 +1174,10 @@ def generateHTML(gSourceAccount, forceIndex=0):
 	htmlpath = os.path.join(gSourceAccount.pathForJournal(), 'html')
 	if not os.path.exists(htmlpath):
 		os.makedirs(htmlpath)
-	
+
 	ids = gAllEntries.keys()
 	ids.sort(lambda x,y: int(x)-int(y))
-	
+
 	for id in ids:
 		try:
 			gAllEntries[id].emit(htmlpath, gSourceAccount.groupmap);
@@ -1177,9 +1187,9 @@ def generateHTML(gSourceAccount, forceIndex=0):
 		emitIndex(htmlpath, forceIndex)
 	except StandardError, e:
 		ljmException("skipping html index generation because of error:" % id, e)
-		
+
 def fetchNewComments(lastmaxid, lastsync, refreshall=0):
-	# TODO 
+	# TODO
 	# reimplement entirely using the undocumented XMLRPC api extensions here
 	# http://lj-dev.livejournal.com/838857.html
 
@@ -1190,14 +1200,14 @@ def fetchNewComments(lastmaxid, lastsync, refreshall=0):
 		f.close()
 	except:
 		metacache = {}
-	
+
 	try:
 		f = gSourceAccount.readMetadataFile('user.map', 0)
 		usermap = pickle.load(f)
 		f.close()
 	except:
 		usermap = {}
-		
+
 	ljmLog("Fetching comment metadata for: %s" % gSourceAccount.journal)
 
 	newcomments = 0
@@ -1206,7 +1216,7 @@ def fetchNewComments(lastmaxid, lastsync, refreshall=0):
 	commenturl = gSourceAccount.host+"/export_comments.bml?&get=comment_meta&startid=%d"
 	if gSourceAccount.user != gSourceAccount.journal:
 		commenturl = commenturl + "&authas=%s" % gSourceAccount.journal
-	
+
 	maxid = lastmaxid
 	while 1:
 		try:
@@ -1233,24 +1243,24 @@ def fetchNewComments(lastmaxid, lastsync, refreshall=0):
 				usermap[u.getAttribute("id")] = u.getAttribute("user")
 			if maxid >= int(meta.getElementsByTagName("maxid")[0].firstChild.nodeValue):
 				break
-	
+
 	f = gSourceAccount.openMetadataFile('comment.meta', 0)
 	pickle.dump(metacache, f)
 	f.close()
-	
+
 	f = gSourceAccount.openMetadataFile('user.map', 0)
 	pickle.dump(usermap, f)
 	f.close()
-	
+
 	newmaxid = maxid
 	maxid = lastmaxid
-	
+
 	# Phase 2: fetch comment bodies.
 	ljmLog("Fetching comment bodies for: %s" % gSourceAccount.journal)
 	commenturl = gSourceAccount.host+"/export_comments.bml?get=comment_body&startid=%d"
 	if gSourceAccount.user != gSourceAccount.journal:
 		commenturl = commenturl + "&authas=%s" % gSourceAccount.journal
-	
+
 	while 1:
 		try:
 			handle = gSourceAccount.urlopener(urllib2.Request(commenturl % (maxid+1)))
@@ -1274,7 +1284,7 @@ def fetchNewComments(lastmaxid, lastsync, refreshall=0):
 				}
 				if usermap.has_key(c.getAttribute("posterid")):
 					comment["user"] = usermap[c.getAttribute("posterid")]
-	
+
 				path = os.path.join(gSourceAccount.pathForJournal(), makeItemName(jitemid, 'entry'))
 				if not os.path.exists(path):
 					os.makedirs(path)
@@ -1282,25 +1292,25 @@ def fetchNewComments(lastmaxid, lastsync, refreshall=0):
 					entry = xml.dom.minidom.parse(os.path.join(path, "comments.xml"))
 				except:
 					entry = xml.dom.minidom.getDOMImplementation().createDocument(None, "comments", None)
-	
+
 				found = 0
 				for d in entry.getElementsByTagName("comment"):
 					if int(d.getElementsByTagName("id")[0].firstChild.nodeValue) == id:
 						found = 1
 						break
-	
+
 				if refreshall or not found:
 					if gAllEntries.has_key(jitemid):
 						cmt = Comment(comment)
 						gAllEntries[jitemid].addComment(cmt)
 					entry.documentElement.appendChild(createxml(entry, "comment", comment))
-					
+
 					f = codecs.open(os.path.join(path, "comments.xml"), "w", "UTF-8")
 					entry.writexml(f)
 					f.close()
-					
+
 					newcomments += 1
-	
+
 				if id > maxid:
 					maxid = id
 				# end comments.xml handling
@@ -1310,7 +1320,7 @@ def fetchNewComments(lastmaxid, lastsync, refreshall=0):
 	return (maxid, newcomments)
 	# end fetch comments
 
-	
+
 
 #-------------------------------------------------------------------------------
 
@@ -1324,16 +1334,16 @@ def main(options):
 		os.makedirs(p)
 		print "Created subdirectory: %s" % p
 		firstRunForAccount = 1
-	
+
 	path = gSourceAccount.metapath()
 	if not os.path.exists(path):
 		os.makedirs(path)
 	gSourceAccount.runlog = codecs.open(os.path.join(path, "ljmigrate.log"), 'a', 'utf-8', 'replace')
 	ljmLog("----------\nljmigrate run started: %s" % time.asctime())
 	ljmLog("Version: %s" % __version__)
-	
+
 	dontFetchImageData = not options.userPicsOnly and options.skipUserPics
-	
+
 	gSourceAccount.makeSession()
 
 	if options.commentsOnly and not firstRunForAccount:
@@ -1344,15 +1354,15 @@ def main(options):
 		generateHTML(gSourceAccount, 1)
 		endLogging()
 		return
-	
+
 	gSourceAccount.fetchUserPics(dontFetchImageData)
 	if options.userPicsOnly and not firstRunForAccount:
 		endLogging()
 		return
-		
+
 	if not options.commsOnly:
 		synchronizeJournals(gMigrate, options.retryMigrate)
-	
+
 	if gDestinationAccount:
 		accounts = map(None, gSourceAccount.journal_list, gDestinationAccount.journal_list)
 		for pair in accounts:
@@ -1366,16 +1376,16 @@ def main(options):
 		for comm in gSourceAccount.journal_list:
 			gSourceAccount.journal = comm
 			synchronizeJournals(0, options.retryMigrate)
-			
+
 	if options.regenhtml:
 		gSourceAccount.readGroupMap()
 		gAllEntries = gSourceAccount.readAllEntryFiles()
 		generateHTML(gSourceAccount, 1)
-	
+
 	endLogging()
-	
-	
-		
+
+
+
 def nukeall(options):
 	# TODO note copy and pasted code blocks: refactor
 	try:
@@ -1387,7 +1397,7 @@ def nukeall(options):
 	except StandardError, e:
 		print "Problem reading config file: %s" % str(e)
 		sys.exit()
-	
+
 	pHost = None
 	pPort = None
 	try:
@@ -1421,9 +1431,9 @@ def nukeall(options):
 	if confirm != 'Y':
 		print "Safe choice."
 		sys.exit()
-	
+
 	print "Okay. Nuking all entries."
-	
+
 	lastsync = ""
 	deleted = 0
 	errors = 0
@@ -1438,18 +1448,18 @@ def nukeall(options):
 				deleted += 1
 			lastsync = item['time']
 	print "Deleted %d items." % (deleted, )
-	
+
 
 def version():
 	print "ljmigrate.py version", __version__
 	sys.exit();
-	
-	
+
+
 if __name__ == '__main__':
 	usage = "usage: %prog [options]"
 	version = "%prog " + __version__
 	parser = OptionParser(usage=usage, version=version)
-	
+
 	parser.add_option('-r', '--retry', action='store_true', dest='retryMigrate', default=0,
 		help="run through all posts on source, re-trying to migrate posts that weren't migrated the first time")
 	parser.add_option('-u', '--user-pics-skip', action='store_true', dest='skipUserPics', default=0,
@@ -1465,7 +1475,7 @@ if __name__ == '__main__':
 	parser.add_option('--comments-only', action='store_true', dest='commentsOnly', default=0,
 		help="re-fetch all comments, skipping posts and other data")
 	parser.add_option('-f', '--config-file', action='store', type='string', dest='configFile', default=configpath,
-		help="specify location of config file") 
+		help="specify location of config file")
 
 	(options, args) = parser.parse_args()
 
