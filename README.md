@@ -188,12 +188,11 @@ Answer the two questions with Y if you REALLY REALLY mean it. THERE IS NO GOING 
 
 TBD
 
-## Many thanks to the brave testers!
+## Contributors
 
-Valuable bug-reporting provided by:
-ldybastet, kannnichtfranz, eleraama, daiseechain, nm973, zortified,
-weirdquark, winterthunder, unmisha, chicken_cem
+[don-pit (Petr Gladkiy)](https://github.com/don-pit)
 
+Early bug-reporting provided by LJ users ldybastet, kannnichtfranz, eleraama, daiseechain, nm973, zortified, weirdquark, winterthunder, unmisha, chicken_cem.
 
 ## Changes from ljdump 1.2
 
