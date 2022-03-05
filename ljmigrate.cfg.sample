@@ -22,8 +22,10 @@ migrate-community-posts-by-others: False
 server: www.livejournal.com
 # Your user name.
 user: myusername
-# Your password. Will not be sent in the clear; this tool uses the challenge
-# response authentication mechanism.
+# Your password. This will be send as part of a challenge-response
+# authentication (so not as cleartext), except with dreamwidth
+# where it will be send as cleartext over HTTPS relying on the
+* HTTPS encryption to protect it.
 password: mypassword
 # communities: sourcecomm1 sourcecomm2
 

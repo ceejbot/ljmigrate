@@ -156,7 +156,10 @@ class Account(object):
 		urllib2.install_opener(opener)
 		self.urlopener = urllib2.urlopen
 
-		if not 'livejournal' in self.site:
+		if 'dreamwidth' in self.site:
+			self.makeSessionPlaintext()
+			return
+		elif not 'livejournal' in self.site:
 			self.makeSessionSimple()
 			return
 
@@ -222,6 +225,20 @@ class Account(object):
 			rfc2109=False)
 		self.cookiejar.set_cookie(cookie)
 
+	def makeSessionPlaintext(self):
+		ljmLog("Generating session using plaintext password")
+		qs = "mode=sessiongenerate&user=%s&auth_method=clear&password=%s" % (urllib.quote(self.user), urllib.quote(self.password))
+		r = self.urlopener(self.flat_api, qs)
+		response = self.handleFlatResponse(r)
+		r.close()
+		self.ljsession = response['ljsession']
+
+		cookie = cookielib.Cookie(version=0, name='ljsession', value=self.ljsession, port=None, port_specified=False,
+			domain=self.site, domain_specified=False, domain_initial_dot=False, path='/', path_specified=True,
+			secure=False, expires=None, discard=True, comment=None, comment_url=None, rest={'HttpOnly': None},
+			rfc2109=False)
+		self.cookiejar.set_cookie(cookie)
+
 	def handleFlatResponse(self, response):
 		r = {}
 		while 1:
@@ -237,6 +254,9 @@ class Account(object):
 		return r
 
 	def doChallenge(self, params):
+		if 'dreamwidth' in self.site:
+			return self.addPlaintextPassword(params)
+
 		challenge = self.server_proxy.LJ.XMLRPC.getchallenge()
 		params.update({
 			'auth_method': "challenge",
@@ -247,6 +267,14 @@ class Account(object):
 
 	def calcChallenge(self, challenge):
 		return md5.new(challenge+md5.new(self.password).hexdigest()).hexdigest()
+
+	def addPlaintextPassword(self, params):
+		"""Transform API call params to include plaintext authorization."""
+		params.update({
+			'auth_method': "clear",
+			'password': self.password,
+		})
+		return params
 
 	def getUserPics(self):
 		params = {
