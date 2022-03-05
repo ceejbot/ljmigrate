@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 """
 Based on ljdump; original ljdump license & header in LICENCE.text.
