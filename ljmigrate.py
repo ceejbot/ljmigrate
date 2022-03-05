@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 """
 Based on ljdump; original ljdump license & header in LICENCE.text.
@@ -71,7 +71,7 @@ class ProxiedTransport(xmlrpclib.Transport):
 
 	# overridden
 	def send_request(self, connection, handler, request_body):
-		connection.putrequest("POST", 'http://%s%s' % (self.realhost, handler))
+		connection.putrequest("POST", 'https://%s%s' % (self.realhost, handler))
 
 	# overridden
 	def send_host(self, connection, host):
@@ -91,12 +91,12 @@ class Account(object):
 		else:
 			self.host = host
 
-		m = re.search("http://(.*)", host)
+		m = re.search("https://(.*)", host)
 		if m:
 			self.site = m.group(1)
 		else:
 			self.site = host
-			self.host = "http://" + host
+			self.host = "https://" + host
 
 		self.user = user
 		self.password = password
@@ -156,7 +156,10 @@ class Account(object):
 		urllib2.install_opener(opener)
 		self.urlopener = urllib2.urlopen
 
-		if not 'livejournal' in self.site:
+		if 'dreamwidth' in self.site:
+			self.makeSessionPlaintext()
+			return
+		elif not 'livejournal' in self.site:
 			self.makeSessionSimple()
 			return
 
@@ -222,6 +225,20 @@ class Account(object):
 			rfc2109=False)
 		self.cookiejar.set_cookie(cookie)
 
+	def makeSessionPlaintext(self):
+		ljmLog("Generating session using plaintext password")
+		qs = "mode=sessiongenerate&user=%s&auth_method=clear&password=%s" % (urllib.quote(self.user), urllib.quote(self.password))
+		r = self.urlopener(self.flat_api, qs)
+		response = self.handleFlatResponse(r)
+		r.close()
+		self.ljsession = response['ljsession']
+
+		cookie = cookielib.Cookie(version=0, name='ljsession', value=self.ljsession, port=None, port_specified=False,
+			domain=self.site, domain_specified=False, domain_initial_dot=False, path='/', path_specified=True,
+			secure=False, expires=None, discard=True, comment=None, comment_url=None, rest={'HttpOnly': None},
+			rfc2109=False)
+		self.cookiejar.set_cookie(cookie)
+
 	def handleFlatResponse(self, response):
 		r = {}
 		while 1:
@@ -237,6 +254,9 @@ class Account(object):
 		return r
 
 	def doChallenge(self, params):
+		if 'dreamwidth' in self.site:
+			return self.addPlaintextPassword(params)
+
 		challenge = self.server_proxy.LJ.XMLRPC.getchallenge()
 		params.update({
 			'auth_method': "challenge",
@@ -247,6 +267,14 @@ class Account(object):
 
 	def calcChallenge(self, challenge):
 		return md5.new(challenge+md5.new(self.password).hexdigest()).hexdigest()
+
+	def addPlaintextPassword(self, params):
+		"""Transform API call params to include plaintext authorization."""
+		params.update({
+			'auth_method': "clear",
+			'password': self.password,
+		})
+		return params
 
 	def getUserPics(self):
 		params = {
@@ -793,8 +821,8 @@ class Entry(object):
 
 		if hasattr(self, 'subject'):
 			subject = self.getStringAttribute('subject')
-			subject = userpattern.sub(r'<b><a href="http://\1.%s/"><img src="http://stat.livejournal.com/img/userinfo.gif" alt="[info]" width="17" height="17" style="vertical-align: bottom; border: 0;" />\1</a></b>' % gSourceAccount.site, subject)
-			subject = commpattern.sub(r'<b><a href="http://community.%s/\1/"><img src="http://stat.livejournal.com/img/community.gif" alt="[info]" width="16" height="16" style="vertical-align: bottom; border: 0;" />\1</a></b>' % gSourceAccount.site, subject)
+			subject = userpattern.sub(r'<b><a href="https://\1.%s/"><img src="https://stat.livejournal.com/img/userinfo.gif" alt="[info]" width="17" height="17" style="vertical-align: bottom; border: 0;" />\1</a></b>' % gSourceAccount.site, subject)
+			subject = commpattern.sub(r'<b><a href="https://community.%s/\1/"><img src="https://stat.livejournal.com/img/community.gif" alt="[info]" width="16" height="16" style="vertical-align: bottom; border: 0;" />\1</a></b>' % gSourceAccount.site, subject)
 		else:
 			subject = "(No Subject)"
 
@@ -842,8 +870,8 @@ class Entry(object):
 			content = self.getStringAttribute('event')
 			if not properties.has_key('opt_preformatted'):
 				content = content.replace("\n", "<br />\n");
-			content = userpattern.sub(r'<b><a href="http://\1.%s/"><img src="http://stat.livejournal.com/img/userinfo.gif" alt="[info]" width="17" height="17" style="vertical-align: bottom; border: 0;" />\1</a></b>' % gSourceAccount.site, content)
-			content = commpattern.sub(r'<b><a href="http://community.%s/\1/"><img src="http://stat.livejournal.com/img/community.gif" alt="[info]" width="16" height="16" style="vertical-align: bottom; border: 0;" />\1</a></b>', content)
+			content = userpattern.sub(r'<b><a href="https://\1.%s/"><img src="https://stat.livejournal.com/img/userinfo.gif" alt="[info]" width="17" height="17" style="vertical-align: bottom; border: 0;" />\1</a></b>' % gSourceAccount.site, content)
+			content = commpattern.sub(r'<b><a href="https://community.%s/\1/"><img src="https://stat.livejournal.com/img/community.gif" alt="[info]" width="16" height="16" style="vertical-align: bottom; border: 0;" />\1</a></b>', content)
 
 			result = result + '\n<br /><div id="Content">%s</div>\n' % (content, )
 
@@ -1070,7 +1098,7 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 						migrateThis = migrateThis and (entry['poster'] == gSourceAccount.user)
 					else:
 						# we prepend the post with a slug indicating who posted originally
-						entry['event'] = (u'<p><b>Original poster: <i><a href="http://%s.%s/">%s</a></i></b><p>' % (entry['poster'],  gSourceAccount.site, entry['poster'])) + entry['event']
+						entry['event'] = (u'<p><b>Original poster: <i><a href="https://%s.%s/">%s</a></i></b><p>' % (entry['poster'],  gSourceAccount.site, entry['poster'])) + entry['event']
 				elif considerTags and migrate:
 					# This is a personal journal, but we're migrating only specific tags.
 					# See if this entry has at least one of the target tags.
@@ -1191,7 +1219,7 @@ def generateHTML(gSourceAccount, forceIndex=0):
 def fetchNewComments(lastmaxid, lastsync, refreshall=0):
 	# TODO
 	# reimplement entirely using the undocumented XMLRPC api extensions here
-	# http://lj-dev.livejournal.com/838857.html
+	# https://lj-dev.livejournal.com/838857.html
 
 	global gAllEntries
 	try:
