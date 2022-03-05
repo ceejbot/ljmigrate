@@ -71,7 +71,7 @@ class ProxiedTransport(xmlrpclib.Transport):
 
 	# overridden
 	def send_request(self, connection, handler, request_body):
-		connection.putrequest("POST", 'http://%s%s' % (self.realhost, handler))
+		connection.putrequest("POST", 'https://%s%s' % (self.realhost, handler))
 
 	# overridden
 	def send_host(self, connection, host):
@@ -91,12 +91,12 @@ class Account(object):
 		else:
 			self.host = host
 
-		m = re.search("http://(.*)", host)
+		m = re.search("https://(.*)", host)
 		if m:
 			self.site = m.group(1)
 		else:
 			self.site = host
-			self.host = "http://" + host
+			self.host = "https://" + host
 
 		self.user = user
 		self.password = password
@@ -793,8 +793,8 @@ class Entry(object):
 
 		if hasattr(self, 'subject'):
 			subject = self.getStringAttribute('subject')
-			subject = userpattern.sub(r'<b><a href="http://\1.%s/"><img src="http://stat.livejournal.com/img/userinfo.gif" alt="[info]" width="17" height="17" style="vertical-align: bottom; border: 0;" />\1</a></b>' % gSourceAccount.site, subject)
-			subject = commpattern.sub(r'<b><a href="http://community.%s/\1/"><img src="http://stat.livejournal.com/img/community.gif" alt="[info]" width="16" height="16" style="vertical-align: bottom; border: 0;" />\1</a></b>' % gSourceAccount.site, subject)
+			subject = userpattern.sub(r'<b><a href="https://\1.%s/"><img src="https://stat.livejournal.com/img/userinfo.gif" alt="[info]" width="17" height="17" style="vertical-align: bottom; border: 0;" />\1</a></b>' % gSourceAccount.site, subject)
+			subject = commpattern.sub(r'<b><a href="https://community.%s/\1/"><img src="https://stat.livejournal.com/img/community.gif" alt="[info]" width="16" height="16" style="vertical-align: bottom; border: 0;" />\1</a></b>' % gSourceAccount.site, subject)
 		else:
 			subject = "(No Subject)"
 
@@ -842,8 +842,8 @@ class Entry(object):
 			content = self.getStringAttribute('event')
 			if not properties.has_key('opt_preformatted'):
 				content = content.replace("\n", "<br />\n");
-			content = userpattern.sub(r'<b><a href="http://\1.%s/"><img src="http://stat.livejournal.com/img/userinfo.gif" alt="[info]" width="17" height="17" style="vertical-align: bottom; border: 0;" />\1</a></b>' % gSourceAccount.site, content)
-			content = commpattern.sub(r'<b><a href="http://community.%s/\1/"><img src="http://stat.livejournal.com/img/community.gif" alt="[info]" width="16" height="16" style="vertical-align: bottom; border: 0;" />\1</a></b>', content)
+			content = userpattern.sub(r'<b><a href="https://\1.%s/"><img src="https://stat.livejournal.com/img/userinfo.gif" alt="[info]" width="17" height="17" style="vertical-align: bottom; border: 0;" />\1</a></b>' % gSourceAccount.site, content)
+			content = commpattern.sub(r'<b><a href="https://community.%s/\1/"><img src="https://stat.livejournal.com/img/community.gif" alt="[info]" width="16" height="16" style="vertical-align: bottom; border: 0;" />\1</a></b>', content)
 
 			result = result + '\n<br /><div id="Content">%s</div>\n' % (content, )
 
@@ -1070,7 +1070,7 @@ def synchronizeJournals(migrate = 0, retryMigrate = 0):
 						migrateThis = migrateThis and (entry['poster'] == gSourceAccount.user)
 					else:
 						# we prepend the post with a slug indicating who posted originally
-						entry['event'] = (u'<p><b>Original poster: <i><a href="http://%s.%s/">%s</a></i></b><p>' % (entry['poster'],  gSourceAccount.site, entry['poster'])) + entry['event']
+						entry['event'] = (u'<p><b>Original poster: <i><a href="https://%s.%s/">%s</a></i></b><p>' % (entry['poster'],  gSourceAccount.site, entry['poster'])) + entry['event']
 				elif considerTags and migrate:
 					# This is a personal journal, but we're migrating only specific tags.
 					# See if this entry has at least one of the target tags.
@@ -1191,7 +1191,7 @@ def generateHTML(gSourceAccount, forceIndex=0):
 def fetchNewComments(lastmaxid, lastsync, refreshall=0):
 	# TODO
 	# reimplement entirely using the undocumented XMLRPC api extensions here
-	# http://lj-dev.livejournal.com/838857.html
+	# https://lj-dev.livejournal.com/838857.html
 
 	global gAllEntries
 	try:

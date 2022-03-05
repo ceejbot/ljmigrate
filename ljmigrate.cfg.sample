@@ -37,7 +37,7 @@ password: myotherpassword
 
 # [nuke]
 # option section for the nuclear option; see README for details
-# server: http://insanejournal.com
+# server: https://insanejournal.com
 # user: myotheruser
 # password: myotherpassword
 # community: comm_to_nuke (optional)
